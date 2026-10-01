@@ -633,3 +633,184 @@ button:disabled {
   text-decoration: line-through;
   opacity: 0.45;
 }
+
+/* ===== 식물 고르기 / 정원 단계 ===== */
+#grow-view[hidden],
+.picker[hidden] {
+  display: none;
+}
+
+.picker-title {
+  margin-bottom: 12px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.plant-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  background: var(--given-bg);
+  border-radius: 16px;
+}
+.plant-art svg {
+  display: block;
+  width: 72px;
+  height: 72px;
+}
+.plant-card .name {
+  font-size: 15px;
+  font-weight: 700;
+}
+.plant-card .owned {
+  font-size: 12px;
+  color: var(--muted);
+}
+.plant-card button {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 0;
+  color: #fff;
+  background: var(--accent);
+}
+
+.expand-box {
+  margin-top: 16px;
+  padding: 14px;
+  text-align: left;
+  background: var(--given-bg);
+  border-radius: 16px;
+}
+.expand-title {
+  font-weight: 700;
+}
+.expand-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.expand-box .primary {
+  margin-top: 10px;
+}
+
+.lock-box {
+  grid-column: 1 / -1;
+  padding: 28px 12px;
+  text-align: center;
+  background: var(--given-bg);
+  border-radius: 16px;
+}
+.lock-icon {
+  font-size: 40px;
+}
+.lock-box .name {
+  margin: 6px 0;
+  font-weight: 700;
+}
+
+/* 도감 */
+.dex-title {
+  margin: 20px 0 8px;
+  font-size: 15px;
+  color: var(--muted);
+}
+.dex {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.dex-item {
+  padding: 8px 4px;
+  font-size: 12px;
+  text-align: center;
+  background: var(--given-bg);
+  border-radius: 12px;
+}
+.dex-item svg {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 2px;
+}
+.dex-item.locked {
+  color: var(--muted);
+}
+.dex-q {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 2px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 56px;
+  opacity: 0.4;
+}
+
+/* ===== 1단계 작은 정원 ===== */
+.scene.small .scene-sun {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  line-height: 1;
+}
+.scene.small .bed {
+  position: absolute;
+  left: 10%;
+  top: 48%;
+  width: 80%;
+  height: 48%;
+  background: rgba(122, 82, 48, 0.55);
+  border: 3px dashed #c9a26b; /* 울타리 */
+  border-radius: 14px;
+}
+.scene.small .slot {
+  position: absolute;
+  width: 14%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+}
+.scene.small .slot-plant {
+  position: absolute;
+  transform: translate(-50%, -62%);
+}
+.scene.small .slot-plant svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.scene.small .slot-plant.growing {
+  opacity: 0.85;
+}
+
+/* 씨앗 상점 / 잠긴 식물 */
+.shop-heading {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  color: var(--muted);
+}
+.shop-heading:first-child {
+  margin-top: 0;
+}
+.shop-item .plant-art svg {
+  display: block;
+  width: 56px;
+  height: 56px;
+}
+.plant-card.locked .plant-art {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+.plant-card button.seed-locked {
+  color: var(--text);
+  background: var(--key-bg);
+}
