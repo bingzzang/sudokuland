@@ -24,7 +24,8 @@ const WATER_COST = 3;                                  // 한 단계 키우는 �
 const PLANT_EMOJIS = ["🌳", "🌲", "🌴", "🌸", "🍎"];   // 정원에 심겼을 때 모습 (무작위)
 const GARDEN_KEY = "sudoku-garden";
 
-let garden = { stage: 0, planted: [] }; // stage: 지금 키우는 나무 단계, planted: 심은 나무들
+// stage: 지금 키우는 나무 단계, planted: 심은 나무들, decor: 상점에서 산 장식 id들
+let garden = { stage: 0, planted: [], decor: [] };
 let resumeOnClose = false;              // 정원을 닫을 때 타이머를 이어갈지
 
 const gardenEl = document.getElementById("garden");
@@ -37,6 +38,8 @@ const plantedEl = document.getElementById("planted");
 const plantedTitleEl = document.getElementById("planted-title");
 const tabGrowEl = document.getElementById("tab-grow");
 const tabStatusEl = document.getElementById("tab-status");
+const tabShopEl = document.getElementById("tab-shop");
+const tabShopBtn = document.getElementById("tab-shop-btn");
 const tabGrowBtn = document.getElementById("tab-grow-btn");
 const tabStatusBtn = document.getElementById("tab-status-btn");
 const statusBodyEl = document.getElementById("status-body");
@@ -44,11 +47,14 @@ const statusBodyEl = document.getElementById("status-body");
 function loadGarden() {
   try {
     const saved = JSON.parse(localStorage.getItem(GARDEN_KEY));
-    if (saved && Number.isInteger(saved.stage) && Array.isArray(saved.planted)) return saved;
+    if (saved && Number.isInteger(saved.stage) && Array.isArray(saved.planted)) {
+      // 상점 기능 이전에 저장된 데이터에는 decor가 없으므로 빈 배열로 채운다
+      return { ...saved, decor: Array.isArray(saved.decor) ? saved.decor : [] };
+    }
   } catch {
     // 저장소를 못 쓰거나 값이 깨졌으면 새로 시작
   }
-  return { stage: 0, planted: [] };
+  return { stage: 0, planted: [], decor: [] };
 }
 
 function saveGarden() {
@@ -85,17 +91,88 @@ function renderGarden(grew = false) {
     treeActionBtn.disabled = totalStars < WATER_COST;
   }
 
-  plantedTitleEl.textContent = `심은 나무 ${garden.planted.length}그루`;
+  // 심은 나무와 산 장식을 한 정원에 함께 보여준다
+  plantedTitleEl.textContent =
+    `내 정원 · 나무 ${garden.planted.length}그루 · 장식 ${garden.decor.length}개`;
   plantedEl.innerHTML = "";
-  if (garden.planted.length === 0) {
-    plantedEl.innerHTML = '<span class="empty">아직 심은 나무가 없어요</span>';
+  const decorEmojis = garden.decor.map((id) => SHOP_ITEMS.find((it) => it.id === id)?.emoji);
+  const all = [...garden.planted, ...decorEmojis.filter(Boolean)];
+  if (all.length === 0) {
+    plantedEl.innerHTML = '<span class="empty">아직 정원이 비어 있어요</span>';
   } else {
-    garden.planted.forEach((emoji) => {
+    all.forEach((emoji) => {
       const span = document.createElement("span");
       span.textContent = emoji;
       plantedEl.appendChild(span);
     });
   }
+}
+
+// ===== 상점 (별로 정원 장식 사기) =====
+const SHOP_ITEMS = [
+  { id: "tulip", emoji: "🌷", name: "튤립", price: 2 },
+  { id: "sunflower", emoji: "🌻", name: "해바라기", price: 2 },
+  { id: "mushroom", emoji: "🍄", name: "버섯", price: 3 },
+  { id: "rock", emoji: "🪨", name: "바위", price: 3 },
+  { id: "bee", emoji: "🐝", name: "꿀벌", price: 4 },
+  { id: "butterfly", emoji: "🦋", name: "나비", price: 4 },
+  { id: "bench", emoji: "🪑", name: "벤치", price: 5 },
+  { id: "lantern", emoji: "🏮", name: "등불", price: 5 },
+  { id: "birdhouse", emoji: "🏠", name: "새집", price: 6 },
+  { id: "fountain", emoji: "⛲", name: "분수", price: 8 },
+  { id: "rabbit", emoji: "🐇", name: "토끼", price: 10 },
+  { id: "rainbow", emoji: "🌈", name: "무지개", price: 12 },
+];
+const MAX_DECOR = 30; // 정원이 너무 길어지지 않게 하는 상한
+
+const shopStarsEl = document.getElementById("shop-stars");
+const shopListEl = document.getElementById("shop-list");
+const shopMsgEl = document.getElementById("shop-msg");
+
+function renderShop() {
+  shopStarsEl.textContent = `보유 별 ⭐ ${totalStars} · 장식 ${garden.decor.length}/${MAX_DECOR}`;
+  shopListEl.innerHTML = "";
+
+  SHOP_ITEMS.forEach((item) => {
+    const owned = garden.decor.filter((id) => id === item.id).length;
+
+    const card = document.createElement("div");
+    card.className = "shop-item";
+    card.innerHTML =
+      `<div class="emoji">${item.emoji}</div>` +
+      `<div class="name">${item.name}</div>` +
+      `<div class="owned">${owned ? `보유 ${owned}개` : ""}</div>`;
+
+    const btn = document.createElement("button");
+    btn.textContent = `⭐ ${item.price} 구매`;
+    btn.disabled = totalStars < item.price || garden.decor.length >= MAX_DECOR;
+    btn.addEventListener("click", () => buyItem(item.id));
+    card.appendChild(btn);
+
+    shopListEl.appendChild(card);
+  });
+}
+
+function buyItem(id) {
+  const item = SHOP_ITEMS.find((it) => it.id === id);
+  if (!item) return;
+
+  if (garden.decor.length >= MAX_DECOR) {
+    shopMsgEl.textContent = "정원이 가득 찼어요!";
+    return;
+  }
+  if (totalStars < item.price) {
+    shopMsgEl.textContent = "별이 부족해요. 스도쿠를 풀어서 모아 보세요!";
+    return;
+  }
+
+  totalStars -= item.price;
+  saveStars(totalStars);
+  showStars();
+  garden.decor.push(id);
+  saveGarden();
+  shopMsgEl.textContent = `${item.emoji} ${item.name}을(를) 정원에 놓았어요!`;
+  renderShop();
 }
 
 function treeAction() {
@@ -174,6 +251,7 @@ function renderStatus() {
     </div>
     <ul class="stat-list">
       ${statRow("🌳 심은 나무", `${garden.planted.length}그루`)}
+      ${statRow("🌷 정원 장식", `${garden.decor.length}개`)}
       ${statRow("⭐ 보유 별", totalStars)}
       ${statRow("🏅 지금까지 번 별", stats.earned)}
       <li class="head">푼 퍼즐</li>`;
@@ -192,13 +270,18 @@ function renderStatus() {
 }
 
 function showTab(name) {
-  const grow = name === "grow";
-  tabGrowEl.hidden = !grow;
-  tabStatusEl.hidden = grow;
-  tabGrowBtn.classList.toggle("active", grow);
-  tabStatusBtn.classList.toggle("active", !grow);
-  if (grow) renderGarden();
-  else renderStatus();
+  tabGrowEl.hidden = name !== "grow";
+  tabShopEl.hidden = name !== "shop";
+  tabStatusEl.hidden = name !== "status";
+  tabGrowBtn.classList.toggle("active", name === "grow");
+  tabShopBtn.classList.toggle("active", name === "shop");
+  tabStatusBtn.classList.toggle("active", name === "status");
+
+  if (name === "grow") renderGarden();
+  else if (name === "shop") {
+    shopMsgEl.textContent = "";
+    renderShop();
+  } else renderStatus();
 }
 
 function openGarden() {
@@ -845,6 +928,7 @@ document.getElementById("garden-btn").addEventListener("click", openGarden);
 document.getElementById("garden-close").addEventListener("click", closeGarden);
 treeActionBtn.addEventListener("click", treeAction);
 tabGrowBtn.addEventListener("click", () => showTab("grow"));
+tabShopBtn.addEventListener("click", () => showTab("shop"));
 tabStatusBtn.addEventListener("click", () => showTab("status"));
 // 어두운 배경을 누르면 닫기
 gardenEl.addEventListener("click", (e) => {

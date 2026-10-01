@@ -202,7 +202,7 @@ main[hidden] {
 }
 .tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   margin-bottom: 16px;
   padding: 4px;
@@ -221,6 +221,46 @@ main[hidden] {
 }
 section[hidden] {
   display: none;
+}
+
+/* 상점 */
+.shop-stars {
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+.shop-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px 10px;
+  background: var(--given-bg);
+  border-radius: 16px;
+}
+.shop-item .emoji {
+  font-size: 40px;
+  line-height: 1.2;
+}
+.shop-item .name {
+  font-size: 15px;
+  font-weight: 700;
+}
+.shop-item .owned {
+  min-height: 1.2em;
+  font-size: 12px;
+  color: var(--muted);
+}
+.shop-item button {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 0;
+  color: #fff;
+  background: var(--accent);
 }
 
 /* 현황 화면 */
