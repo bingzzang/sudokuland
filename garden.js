@@ -3,10 +3,18 @@
 // 함수 안에서 쓸 때(실행 시점)에 script.js에 있는 것을 가져다 쓴다.
 
 const GARDEN_KEY = "sudoku-garden";
-const ITEM_LIMIT = { 1: 10, 2: 30 }; // 정원 단계별로 놓을 수 있는 아이템 수 (식물 + 장식)
-const EXPAND_COST = 20;           // 2단계 정원으로 확장하는 데 드는 별
+const ITEM_LIMIT = 10;  // 정원 하나에 놓을 수 있는 아이템 수 (식물 + 장식)
+const UNLOCK_COST = 20; // 다음 정원을 여는 데 드는 별
+
+// 정원 목록. 단계마다 배경, 키울 수 있는 식물, 파는 장식이 다르다
+const GARDENS = {
+  1: { name: "풀밭 정원", icon: "🌱", theme: "meadow", plants: ["apple", "tulip", "cherry", "sunflower", "rose"] },
+  2: { name: "연못 정원", icon: "🌊", theme: "pond", plants: ["lotus", "bamboo", "hydrangea", "reed"] },
+};
+const GARDEN_IDS = Object.keys(GARDENS).map(Number);
 
 // 식물 종류. cost = 한 단계 키우는 데 드는 별, stages = 단계 이름 (마지막이 다 자란 모습)
+// type은 정원 풍경에서 보이는 크기 기준 (tree는 크게, flower는 작게)
 const PLANTS = {
   apple: {
     name: "사과나무", type: "tree", cost: 3,
@@ -28,11 +36,27 @@ const PLANTS = {
     name: "장미", type: "flower", cost: 2,
     stages: ["새싹", "봉오리", "활짝 핀 장미"],
   },
+  lotus: {
+    name: "연꽃", type: "flower", cost: 2,
+    stages: ["연잎", "봉오리", "활짝 핀 연꽃"],
+  },
+  bamboo: {
+    name: "대나무", type: "tree", cost: 3,
+    stages: ["새싹", "죽순", "어린 대나무", "대나무"],
+  },
+  hydrangea: {
+    name: "수국", type: "flower", cost: 2,
+    stages: ["새싹", "봉오리", "활짝 핀 수국"],
+  },
+  reed: {
+    name: "갈대", type: "flower", cost: 2,
+    stages: ["새싹", "갈대", "이삭 핀 갈대"],
+  },
 };
 const PLANT_IDS = Object.keys(PLANTS);
-// 씨앗 가격: 상점에서 한 번 사면 그 식물을 계속 심을 수 있다. 기본 식물은 처음부터 열려 있다
-const SEED_PRICE = { apple: 0, tulip: 0, cherry: 8, sunflower: 4, rose: 6 };
-const STARTER_PLANTS = ["apple", "tulip"];
+// 씨앗 가격: 상점에서 한 번 사면 그 식물을 계속 심을 수 있다. 0원은 기본 식물(처음부터 열려 있음)
+const SEED_PRICE = { apple: 0, tulip: 0, cherry: 8, sunflower: 4, rose: 6, lotus: 0, bamboo: 0, hydrangea: 6, reed: 4 };
+const STARTER_PLANTS = ["apple", "tulip", "lotus", "bamboo"];
 const maxStageOf = (id) => PLANTS[id].stages.length - 1;
 const totalCostOf = (id) => PLANTS[id].cost * maxStageOf(id); // 새싹에서 다 자랄 때까지 드는 별
 
@@ -106,22 +130,64 @@ function treeSVG(kind, stage, size) {
   return svgWrap(body, size);
 }
 
-// 꽃 (해바라기 / 튤립 / 장미): 0 새싹, 1 봉오리, 2 활짝 핀 모습
+// 꽃 (해바라기 / 튤립 / 장미 / 연꽃 / 수국 / 갈대): 0 새싹, 1 봉오리, 2 활짝 핀 모습
 function flowerSVG(kind, stage, size) {
+  const leaf = (x, y, rot, fill) =>
+    `<ellipse cx="${x}" cy="${y}" rx="11" ry="5" fill="${fill}" transform="rotate(${rot} ${x} ${y})"/>`;
+
+  if (kind === "lotus") {
+    // 연꽃: 물 위에 연잎이 떠 있고, 자라면 봉오리 → 활짝 핀 꽃
+    let body =
+      '<ellipse cx="50" cy="88" rx="32" ry="8" fill="rgba(79,163,214,0.35)"/>' +
+      '<ellipse cx="50" cy="82" rx="27" ry="8" fill="#43a047"/>' +
+      '<ellipse cx="50" cy="80" rx="23" ry="6" fill="#66bb6a"/>';
+    if (stage === 1) {
+      body +=
+        '<path d="M50 80 C50 70 50 62 50 54" stroke="#4caf50" stroke-width="3" fill="none" stroke-linecap="round"/>' +
+        '<ellipse cx="50" cy="48" rx="6" ry="11" fill="#f48fb1"/>';
+    } else if (stage >= 2) {
+      [-52, -26, 0, 26, 52].forEach((a) => {
+        body += `<ellipse cx="50" cy="56" rx="7" ry="16" fill="#f8bbd0" transform="rotate(${a} 50 72)"/>`;
+      });
+      [-34, 0, 34].forEach((a) => {
+        body += `<ellipse cx="50" cy="60" rx="6" ry="12" fill="#f06292" transform="rotate(${a} 50 72)"/>`;
+      });
+      body += svgCircle(50, 68, 4, "#ffd54f");
+    }
+    return svgWrap(body, size);
+  }
+
   if (stage === 0) return svgWrap(GROUND_SHADOW + SPROUT, size);
+
+  if (kind === "reed") {
+    // 갈대: 가늘고 긴 잎, 다 자라면 끝에 이삭이 달린다
+    const blades = [["M50 90 Q46 60 36 40", -20, 36, 38], ["M50 90 Q50 56 50 28", 0, 50, 26], ["M50 90 Q54 60 64 40", 20, 64, 38]];
+    let body = GROUND_SHADOW;
+    blades.forEach(([d]) => {
+      body += `<path d="${d}" stroke="#7cb342" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+    });
+    if (stage >= 2) {
+      blades.forEach(([, rot, x, y]) => {
+        body += `<ellipse cx="${x}" cy="${y - 6}" rx="4.5" ry="12" fill="#d7bd8d" transform="rotate(${rot} ${x} ${y - 6})"/>`;
+      });
+    }
+    return svgWrap(body, size);
+  }
 
   let body =
     GROUND_SHADOW +
     '<path d="M50 90 C50 78 50 66 50 54" stroke="#3f9b49" stroke-width="4" fill="none" stroke-linecap="round"/>' +
-    '<ellipse cx="39" cy="76" rx="11" ry="5" fill="#5cc86a" transform="rotate(-30 39 76)"/>' +
-    '<ellipse cx="61" cy="70" rx="11" ry="5" fill="#4caf50" transform="rotate(30 61 70)"/>';
+    leaf(39, 76, -30, "#5cc86a") +
+    leaf(61, 70, 30, "#4caf50");
 
   if (stage === 1) {
     // 봉오리: 꽃마다 색이 살짝 비친다
-    const tip = { sunflower: "#ffc107", tulip: "#ff8aa8", rose: "#e8445a" }[kind];
-    body +=
-      svgCircle(50, 50, 7, "#4caf50") +
-      `<ellipse cx="50" cy="46" rx="5" ry="6" fill="${tip}"/>`;
+    if (kind === "hydrangea") {
+      body += svgCircle(44, 52, 6, "#9fa8da") + svgCircle(56, 50, 6, "#7986cb") + svgCircle(50, 42, 6, "#9fa8da");
+    } else {
+      const tip = { sunflower: "#ffc107", tulip: "#ff8aa8", rose: "#e8445a" }[kind];
+      body += svgCircle(50, 50, 7, "#4caf50") + `<ellipse cx="50" cy="46" rx="5" ry="6" fill="${tip}"/>`;
+    }
     return svgWrap(body, size);
   }
 
@@ -135,6 +201,17 @@ function flowerSVG(kind, stage, size) {
     body +=
       '<path d="M36 32 Q36 56 50 58 Q64 56 64 32 L57 40 L50 28 L43 40 Z" fill="#ff4d79"/>' +
       '<path d="M50 28 Q45 44 50 56 Q55 44 50 28 Z" fill="#ff7a9c"/>';
+  } else if (kind === "hydrangea") {
+    // 작은 꽃송이가 둥글게 모여 핀다
+    const colors = ["#7986cb", "#9fa8da", "#5c6bc0"];
+    let n = 0;
+    for (let row = -2; row <= 2; row++) {
+      for (let col = -2; col <= 2; col++) {
+        const x = 50 + col * 9 + (row % 2 ? 4.5 : 0);
+        const y = 42 + row * 8;
+        if ((x - 50) ** 2 + (y - 42) ** 2 <= 24 ** 2) body += svgCircle(x, y, 6, colors[n++ % 3]);
+      }
+    }
   } else {
     body +=
       svgCircle(50, 40, 15, "#e8445a") + svgCircle(50, 40, 11, "#c9324a") +
@@ -144,27 +221,74 @@ function flowerSVG(kind, stage, size) {
   return svgWrap(body, size);
 }
 
+// 대나무: 0 새싹, 1 죽순, 2 어린 대나무(줄기 둘), 3 대나무(줄기 넷)
+function bambooSVG(stage, size) {
+  if (stage === 0) return svgWrap(GROUND_SHADOW + SPROUT, size);
+
+  const stalk = (x, top) => {
+    let s = `<rect x="${x - 3.5}" y="${top}" width="7" height="${90 - top}" rx="3" fill="#7cb342"/>`;
+    for (let y = top + 14; y < 88; y += 16) {
+      s += `<path d="M${x - 4} ${y} H${x + 4}" stroke="#558b2f" stroke-width="2.5"/>`;
+    }
+    return s;
+  };
+  const leaf = (x, y, rot) =>
+    `<ellipse cx="${x}" cy="${y}" rx="11" ry="3.5" fill="#66bb6a" transform="rotate(${rot} ${x} ${y})"/>`;
+
+  let body = GROUND_SHADOW;
+  if (stage === 1) {
+    body +=
+      '<path d="M42 90 L46 56 L50 46 L54 56 L58 90 Z" fill="#c5a572"/>' +
+      '<path d="M43 80 H57 M44 70 H56 M45 60 H55" stroke="#9c7a45" stroke-width="2"/>' +
+      '<path d="M46 56 L50 46 L54 56 Z" fill="#8bc34a"/>';
+  } else if (stage === 2) {
+    body +=
+      stalk(42, 36) + stalk(58, 46) +
+      leaf(42, 40, -30) + leaf(42, 50, 30) + leaf(58, 50, -30) + leaf(58, 60, 30);
+  } else {
+    body +=
+      stalk(32, 22) + stalk(46, 12) + stalk(60, 24) + stalk(73, 38) +
+      leaf(32, 26, -30) + leaf(32, 36, 30) + leaf(46, 16, -30) + leaf(46, 26, 30) +
+      leaf(60, 28, -30) + leaf(60, 38, 30) + leaf(73, 42, -30) + leaf(73, 52, 30);
+  }
+  return svgWrap(body, size);
+}
+
 function plantSVG(id, stage, size) {
-  return PLANTS[id].type === "tree" ? treeSVG(id, stage, size) : flowerSVG(id, stage, size);
+  if (id === "apple" || id === "cherry") return treeSVG(id, stage, size);
+  if (id === "bamboo") return bambooSVG(stage, size);
+  return flowerSVG(id, stage, size);
 }
 
 // ----- 정원 상태 -----
-// level: 정원 단계(1 작은 정원 / 2 꾸미기 정원)
-// growing: 지금 키우는 식물 {plant, stage} (없으면 null)
-// planted: 정원에 심은 식물 id들, discovered: 도감에 등록된 식물 id들,
-// unlocked: 심을 수 있게 열린 식물 id들 (기본 식물 + 상점에서 산 씨앗)
-// decor: 상점에서 산 장식 id들, positions/scales: 직접 옮긴 위치 / 크기 배율 (key 예: d0, t1)
+// current: 지금 보고 있는 정원 번호, unlockedGardens: 열린 정원 수
+// gardens[번호]: 그 정원에 놓인 것들
+//   planted(심은 식물 id들), decor(산 장식 id들),
+//   positions(직접 옮긴 위치), scales(직접 바꾼 크기 배율)  — 키 예: d0(장식 0번), t1(식물 1번)
+// growing: 지금 키우는 식물 {plant, stage, garden(다 자라면 심어질 정원)} (없으면 null)
+// discovered: 도감에 등록된 식물 id들, unlocked: 심을 수 있게 열린 식물 id들(기본 + 산 씨앗)
 let garden = defaultGarden();
 let resumeOnClose = false; // 정원을 닫을 때 타이머를 이어갈지
+let activeTab = "grow";    // 정원 화면에서 열려 있는 탭
+let selectedKey = null;    // 정원 풍경에서 선택한 항목 (치우기 버튼용)
+
+function emptyGardenData() {
+  return { planted: [], decor: [], positions: {}, scales: {} };
+}
 
 function defaultGarden() {
+  const gardens = {};
+  GARDEN_IDS.forEach((id) => (gardens[id] = emptyGardenData()));
   return {
-    level: 1, growing: null, planted: [], discovered: [], unlocked: [...STARTER_PLANTS],
-    decor: [], positions: {}, scales: {},
+    current: 1, unlockedGardens: 1, growing: null, gardens,
+    discovered: [], unlocked: [...STARTER_PLANTS],
   };
 }
 
-// 저장된 데이터를 읽고, 예전 형식(단계 개념이 없던 시절)이면 새 형식으로 바꿔 준다
+const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const isObject = (v) => v && typeof v === "object" && !Array.isArray(v);
+
+// 저장된 데이터를 읽는다. 예전 형식이면 새 형식으로 바꿔 준다
 function loadGarden() {
   let saved = null;
   try {
@@ -172,45 +296,86 @@ function loadGarden() {
   } catch {
     // 저장소를 못 쓰거나 값이 깨졌으면 새로 시작
   }
-  if (!saved || typeof saved !== "object") return defaultGarden();
+  if (!isObject(saved)) return defaultGarden();
+  return isObject(saved.gardens) ? sanitizeGarden(saved) : fromOldFormat(saved);
+}
 
-  const legacy = saved.level === undefined; // 예전 형식: stage(숫자)와 planted만 있음
-  const validId = (id) => (PLANTS[id] ? id : "apple"); // 예전 이모지 값 등은 사과나무로
+// 현재 형식의 저장 데이터를 검사해서 깨진 값은 바로잡는다
+function sanitizeGarden(saved) {
+  const g = defaultGarden();
+  const validPlants = (arr) => (Array.isArray(arr) ? arr.filter((id) => PLANTS[id]) : []);
+
+  GARDEN_IDS.forEach((id) => {
+    const d = saved.gardens[id];
+    if (!isObject(d)) return;
+    g.gardens[id] = {
+      planted: validPlants(d.planted),
+      decor: Array.isArray(d.decor) ? d.decor.filter((x) => typeof x === "string") : [],
+      positions: isObject(d.positions) ? d.positions : {},
+      scales: isObject(d.scales) ? d.scales : {},
+    };
+  });
+
+  g.unlockedGardens = clampInt(Number(saved.unlockedGardens) || 1, 1, GARDEN_IDS.length);
+  g.current = clampInt(Number(saved.current) || 1, 1, g.unlockedGardens);
+
+  const gr = saved.growing;
+  if (isObject(gr) && PLANTS[gr.plant] && Number.isInteger(gr.stage)) {
+    g.growing = {
+      plant: gr.plant,
+      stage: clampInt(gr.stage, 0, maxStageOf(gr.plant)),
+      garden: GARDEN_IDS.includes(gr.garden) ? gr.garden : 1,
+    };
+  }
+
+  const found = new Set(validPlants(saved.discovered));
+  const unlocked = new Set(validPlants(saved.unlocked));
+  STARTER_PLANTS.forEach((id) => unlocked.add(id));
+  GARDEN_IDS.forEach((id) => g.gardens[id].planted.forEach((p) => (found.add(p), unlocked.add(p))));
+  if (g.growing) unlocked.add(g.growing.plant);
+  g.discovered = [...found];
+  g.unlocked = [...unlocked];
+  return g;
+}
+
+// 정원이 하나뿐이던 예전 형식(level, planted, decor ...)을 1단계 정원으로 옮긴다
+function fromOldFormat(saved) {
+  const OLD_PLANTS = ["apple", "cherry", "sunflower", "tulip", "rose"]; // 그때 있던 식물들
+  const legacy = saved.level === undefined; // 더 예전: stage(숫자)와 planted만 있음
+  const validId = (id) => (PLANTS[id] ? id : "apple"); // 아주 예전 이모지 값 등은 사과나무로
   const planted = Array.isArray(saved.planted) ? saved.planted.map(validId) : [];
   const decor = Array.isArray(saved.decor) ? saved.decor.filter((d) => typeof d === "string") : [];
 
-  let growing = null;
+  const g = defaultGarden();
+  g.gardens[1] = {
+    planted,
+    decor,
+    positions: isObject(saved.positions) ? saved.positions : {},
+    scales: isObject(saved.scales) ? saved.scales : {},
+  };
+
   if (legacy) {
     if (Number.isInteger(saved.stage) && saved.stage > 0) {
-      growing = { plant: "apple", stage: Math.min(saved.stage, maxStageOf("apple")) };
+      g.growing = { plant: "apple", stage: Math.min(saved.stage, maxStageOf("apple")), garden: 1 };
     }
-  } else if (saved.growing && PLANTS[saved.growing.plant] && Number.isInteger(saved.growing.stage)) {
+  } else if (isObject(saved.growing) && PLANTS[saved.growing.plant] && Number.isInteger(saved.growing.stage)) {
     const id = saved.growing.plant;
-    growing = { plant: id, stage: Math.max(0, Math.min(saved.growing.stage, maxStageOf(id))) };
+    g.growing = { plant: id, stage: clampInt(saved.growing.stage, 0, maxStageOf(id)), garden: 1 };
   }
 
-  // 이미 식물을 심었거나 장식을 산 예전 정원은 2단계로 이어 간다
-  const level = legacy ? (planted.length > 0 || decor.length > 0 ? 2 : 1) : saved.level === 2 ? 2 : 1;
+  // 예전에 '2단계(넓은 정원)'였던 사람은 새 2단계 정원을 바로 열어 준다
+  g.unlockedGardens = saved.level === 2 ? 2 : 1;
 
   const found = new Set(planted);
   if (Array.isArray(saved.discovered)) saved.discovered.forEach((id) => PLANTS[id] && found.add(id));
-
-  // 씨앗 상점이 생기기 전에 저장된 정원은 모든 식물을 쓰고 있었으니 전부 열어 둔다
-  const unlocked = new Set(Array.isArray(saved.unlocked) ? saved.unlocked.filter((id) => PLANTS[id]) : PLANT_IDS);
+  // 씨앗 상점이 생기기 전에 저장된 정원은 그때 있던 식물을 전부 쓰고 있었으니 모두 열어 둔다
+  const unlocked = new Set(Array.isArray(saved.unlocked) ? saved.unlocked.filter((id) => PLANTS[id]) : OLD_PLANTS);
   STARTER_PLANTS.forEach((id) => unlocked.add(id));
   planted.forEach((id) => unlocked.add(id));
-  if (growing) unlocked.add(growing.plant);
-
-  return {
-    level,
-    growing,
-    planted,
-    discovered: [...found],
-    unlocked: [...unlocked],
-    decor,
-    positions: saved.positions && typeof saved.positions === "object" ? saved.positions : {},
-    scales: saved.scales && typeof saved.scales === "object" ? saved.scales : {},
-  };
+  if (g.growing) unlocked.add(g.growing.plant);
+  g.discovered = [...found];
+  g.unlocked = [...unlocked];
+  return g;
 }
 
 function saveGarden() {
@@ -221,17 +386,22 @@ function saveGarden() {
   }
 }
 
-const capacity = () => ITEM_LIMIT[garden.level];
-// 정원에 놓였거나, 곧 놓일(키우는 중인) 아이템 수. 키우는 식물도 한 칸을 미리 차지한다
-const usedSlots = () => garden.planted.length + garden.decor.length + (garden.growing ? 1 : 0);
-// 정원에 이미 놓인 아이템 수
-const placedCount = () => garden.planted.length + garden.decor.length;
+// ----- 정원 도우미 -----
+const cur = () => garden.gardens[garden.current];  // 지금 보고 있는 정원의 데이터
+const placedCount = (gid = garden.current) => garden.gardens[gid].planted.length + garden.gardens[gid].decor.length;
+// 놓였거나, 곧 놓일(키우는 중인) 아이템 수. 키우는 식물도 한 칸을 미리 차지한다
+const usedSlots = (gid = garden.current) =>
+  placedCount(gid) + (garden.growing && garden.growing.garden === gid ? 1 : 0);
+const isGardenFull = (gid = garden.current) => usedSlots(gid) >= ITEM_LIMIT;
+const gardenLabel = (id) => `${GARDENS[id].icon} ${id}단계 ${GARDENS[id].name}`;
 
 // ----- 화면 요소 -----
 const gardenEl = document.getElementById("garden");
+const gardenSwitchEl = document.getElementById("garden-switch");
 const growViewEl = document.getElementById("grow-view");
 const treeEl = document.getElementById("tree");
 const treeNameEl = document.getElementById("tree-name");
+const growTargetEl = document.getElementById("grow-target");
 const treeDotsEl = document.getElementById("tree-dots");
 const treeActionBtn = document.getElementById("tree-action");
 const pickerEl = document.getElementById("plant-picker");
@@ -246,8 +416,33 @@ const tabShopBtn = document.getElementById("tab-shop-btn");
 const tabSceneBtn = document.getElementById("tab-scene-btn");
 const tabStatusBtn = document.getElementById("tab-status-btn");
 const sceneEl = document.getElementById("scene");
+const sceneActionsEl = document.getElementById("scene-actions");
 const sceneInfoEl = document.getElementById("scene-info");
 const statusBodyEl = document.getElementById("status-body");
+
+// 정원 선택 (위쪽 버튼): 단계마다 다른 정원을 오가며 본다
+function renderGardenSwitch() {
+  gardenSwitchEl.innerHTML = "";
+  GARDEN_IDS.forEach((id) => {
+    const open = id <= garden.unlockedGardens;
+    const btn = document.createElement("button");
+    btn.className = "garden-tab" + (id === garden.current ? " active" : "") + (open ? "" : " locked");
+    btn.textContent = open ? gardenLabel(id) : `🔒 ${id}단계 ${GARDENS[id].name}`;
+    btn.addEventListener("click", () => {
+      if (!open) {
+        // 아직 못 여는 정원: 열 조건을 안내하는 키우기 탭으로
+        showTab("grow");
+        gardenMsgEl.textContent = `${id - 1}단계 정원을 ${ITEM_LIMIT}칸 모두 채우고 ⭐${UNLOCK_COST}로 열 수 있어요.`;
+        return;
+      }
+      garden.current = id;
+      selectedKey = null;
+      saveGarden();
+      showTab(activeTab);
+    });
+    gardenSwitchEl.appendChild(btn);
+  });
+}
 
 // ----- 키우기 탭 -----
 function renderGarden(grew = false) {
@@ -260,6 +455,7 @@ function renderGarden(grew = false) {
     const max = maxStageOf(g.plant);
     treeEl.innerHTML = plantSVG(g.plant, g.stage);
     treeNameEl.textContent = `${plant.name} · ${plant.stages[g.stage]}`;
+    growTargetEl.textContent = `다 자라면 ${gardenLabel(g.garden)}에 심어져요`;
 
     if (grew) {
       treeEl.classList.remove("grow");
@@ -288,13 +484,14 @@ function renderGarden(grew = false) {
   renderExpandBox();
 }
 
-// 키울 식물 고르기
+// 키울 식물 고르기 (지금 보고 있는 정원에서 키울 수 있는 식물만)
 function renderPicker() {
-  const full = usedSlots() >= capacity();
-  pickerEl.innerHTML = `<div class="picker-title">무엇을 키울까요?</div><div class="picker-grid"></div>`;
+  const full = isGardenFull();
+  pickerEl.innerHTML =
+    `<div class="picker-title">${GARDENS[garden.current].name}에 무엇을 심을까요?</div><div class="picker-grid"></div>`;
   const grid = pickerEl.querySelector(".picker-grid");
 
-  PLANT_IDS.forEach((id) => {
+  GARDENS[garden.current].plants.forEach((id) => {
     const plant = PLANTS[id];
     const locked = !garden.unlocked.includes(id);
     const card = document.createElement("div");
@@ -322,66 +519,64 @@ function renderPicker() {
   if (full) {
     const note = document.createElement("p");
     note.className = "garden-msg";
-    note.textContent =
-      garden.level === 1
-        ? "정원이 가득 찼어요. 아래에서 정원을 넓혀 보세요!"
-        : "정원이 가득 찼어요!";
+    note.textContent = "이 정원이 가득 찼어요. 아래에서 다음 정원을 열거나, 풍경에서 아이템을 치워 보세요!";
     pickerEl.appendChild(note);
   }
 }
 
 function startPlant(id) {
-  if (garden.growing || usedSlots() >= capacity() || !garden.unlocked.includes(id)) return;
-  garden.growing = { plant: id, stage: 0 };
+  if (garden.growing || isGardenFull() || !garden.unlocked.includes(id)) return;
+  if (!GARDENS[garden.current].plants.includes(id)) return;
+  garden.growing = { plant: id, stage: 0, garden: garden.current };
   gardenMsgEl.textContent = `${PLANTS[id].name}의 새싹을 심었어요 🌱`;
   saveGarden();
   renderGarden(true);
 }
 
-// 정원 단계 안내 + (1단계가 가득 차면) 정원 넓히기 버튼
+// 지금 정원의 칸 수 안내 + (가득 차면) 다음 정원 열기 버튼
 function renderExpandBox() {
-  const count = placedCount();
-  const cap = capacity();
-  const detail = `식물 ${garden.planted.length}개 · 장식 ${garden.decor.length}개`;
+  const d = cur();
+  const id = garden.current;
+  const next = id + 1;
+  const used = usedSlots();
 
-  if (garden.level === 1) {
-    const full = usedSlots() >= cap;
-    expandBoxEl.innerHTML =
-      `<div class="expand-title">🌱 1단계 · 작은 정원</div>` +
-      `<div class="expand-sub">아이템 ${count}/${cap}칸 (${detail})</div>` +
-      `<div class="bar"><div style="width: ${(usedSlots() / cap) * 100}%"></div></div>` +
-      (full
-        ? ""
-        : `<div class="status-note">${cap}칸을 모두 채우면 정원을 ${ITEM_LIMIT[2]}칸으로 넓힐 수 있어요 (⭐${EXPAND_COST} 필요)</div>`);
+  expandBoxEl.innerHTML =
+    `<div class="expand-title">${gardenLabel(id)}</div>` +
+    `<div class="expand-sub">아이템 ${placedCount()}/${ITEM_LIMIT}칸 (식물 ${d.planted.length}개 · 장식 ${d.decor.length}개)</div>` +
+    `<div class="bar"><div style="width: ${(used / ITEM_LIMIT) * 100}%"></div></div>`;
 
-    if (full) {
+  if (GARDENS[next] && next > garden.unlockedGardens) {
+    if (used >= ITEM_LIMIT) {
       const btn = document.createElement("button");
       btn.className = "primary";
-      btn.textContent = `🏡 정원 넓히기 → ${ITEM_LIMIT[2]}칸 (⭐${EXPAND_COST})`;
-      btn.disabled = totalStars < EXPAND_COST;
-      btn.addEventListener("click", expandGarden);
+      btn.textContent = `${gardenLabel(next)} 열기 (⭐${UNLOCK_COST})`;
+      btn.disabled = totalStars < UNLOCK_COST;
+      btn.addEventListener("click", () => unlockGarden(next));
       expandBoxEl.appendChild(btn);
+    } else {
+      expandBoxEl.insertAdjacentHTML(
+        "beforeend",
+        `<div class="status-note">${ITEM_LIMIT}칸을 모두 채우면 ${gardenLabel(next)}을 열 수 있어요 (⭐${UNLOCK_COST} 필요)</div>`
+      );
     }
-  } else {
-    expandBoxEl.innerHTML =
-      `<div class="expand-title">🏡 2단계 · 넓은 정원</div>` +
-      `<div class="expand-sub">아이템 ${count}/${cap}칸 (${detail})</div>`;
   }
 }
 
-function expandGarden() {
-  if (garden.level !== 1 || usedSlots() < capacity()) return;
-  if (totalStars < EXPAND_COST) {
+function unlockGarden(n) {
+  if (!GARDENS[n] || n !== garden.unlockedGardens + 1 || !isGardenFull(n - 1)) return;
+  if (totalStars < UNLOCK_COST) {
     gardenMsgEl.textContent = "별이 부족해요. 스도쿠를 풀어서 모아 보세요!";
     return;
   }
-  totalStars -= EXPAND_COST;
+  totalStars -= UNLOCK_COST;
   saveStars(totalStars);
   showStars();
-  garden.level = 2;
-  gardenMsgEl.textContent = `🎉 정원이 넓어졌어요! 이제 ${ITEM_LIMIT[2]}칸까지 놓을 수 있어요.`;
+  garden.unlockedGardens = n;
+  garden.current = n;
+  selectedKey = null;
   saveGarden();
-  renderGarden();
+  showTab("grow");
+  gardenMsgEl.textContent = `🎉 ${gardenLabel(n)}이 열렸어요! 새 식물과 장식을 만나 보세요.`;
 }
 
 // 물 주기 / 다 자라면 정원에 심기
@@ -391,10 +586,10 @@ function treeAction() {
   const plant = PLANTS[g.plant];
 
   if (g.stage === maxStageOf(g.plant)) {
-    garden.planted.push(g.plant);
+    garden.gardens[g.garden].planted.push(g.plant); // 키우기 시작한 정원에 심는다
     if (!garden.discovered.includes(g.plant)) garden.discovered.push(g.plant);
     garden.growing = null;
-    gardenMsgEl.textContent = `${plant.name}를 정원에 심었어요! 새로 키울 식물을 골라 보세요.`;
+    gardenMsgEl.textContent = `${plant.name}를 ${GARDENS[g.garden].name}에 심었어요! 새로 키울 식물을 골라 보세요.`;
     saveGarden();
     renderGarden(true);
     return;
@@ -434,17 +629,17 @@ function sceneSize(entry, y, scale = entry.scale ?? 1) {
   return size * scale;
 }
 
+// 식물과 장식을 자유롭게 끌어서 옮기고, 크기를 바꾼다 (놓을 수 있는 개수만 정원마다 제한)
 function renderScene() {
+  const d = cur();
+  GARDEN_IDS.forEach((id) => sceneEl.classList.remove(GARDENS[id].theme));
+  sceneEl.classList.add(GARDENS[garden.current].theme);
   sceneEl.innerHTML = "";
-  renderBigScene();
-}
 
-// 식물과 장식을 자유롭게 끌어서 옮기고, 크기를 바꿀 수 있다 (놓을 수 있는 개수만 단계별로 제한)
-function renderBigScene() {
-  // 지금 키우는 식물은 정원 가운데 앞쪽 (옮길 수 없음)
+  // 이 정원에서 키우는 식물은 정원 가운데 앞쪽 (옮길 수 없음)
   const placed = [{ x: 50, y: 78 }];
   const things = [];
-  const g = garden.growing;
+  const g = garden.growing && garden.growing.garden === garden.current ? garden.growing : null;
   if (g) {
     const kind = PLANTS[g.plant].type;
     things.push({ plantId: g.plant, stage: g.stage, kind, x: 50, y: 78, size: kind === "tree" ? 60 : 46, label: true });
@@ -452,8 +647,8 @@ function renderBigScene() {
 
   // 심은 식물과 산 장식. key는 옮긴 위치/크기를 저장할 때 쓰는 이름
   const entries = [
-    ...garden.planted.map((id, i) => ({ plantId: id, kind: PLANTS[id].type, key: `t${i}` })),
-    ...garden.decor.map((id, i) => {
+    ...d.planted.map((id, i) => ({ plantId: id, kind: PLANTS[id].type, key: `t${i}` })),
+    ...d.decor.map((id, i) => {
       const item = SHOP_ITEMS.find((it) => it.id === id);
       return item ? { emoji: item.emoji, sky: !!item.sky, big: id === "rainbow", key: `d${i}` } : null;
     }),
@@ -463,10 +658,12 @@ function renderBigScene() {
     // 자동 배치는 옮긴 위치와 상관없이 계산해서, 하나를 옮겨도 다른 것들이 움직이지 않는다
     const auto = pickSpot(i, entry.sky, placed);
     placed.push(auto);
-    const spot = garden.positions[entry.key] || auto;
-    const scale = garden.scales[entry.key] ?? 1;
+    const spot = d.positions[entry.key] || auto;
+    const scale = d.scales[entry.key] ?? 1;
     things.push({ ...entry, scale, x: spot.x, y: spot.y, size: sceneSize(entry, spot.y, scale) });
   });
+
+  if (selectedKey && !entries.some((e) => e.key === selectedKey)) selectedKey = null;
 
   things.forEach((t) => {
     const el = document.createElement("div");
@@ -480,11 +677,12 @@ function renderBigScene() {
     el.style.left = `${t.x}%`;
     el.style.top = `${t.y}%`;
     el.style.fontSize = `${t.size}px`;
-    el.style.zIndex = Math.round(t.y * 10); // 아래쪽 것이 앞에 오게
+    el.style.zIndex = Math.round(t.y * 10) + 10; // 아래쪽 것이 앞에 오게
     sceneEl.appendChild(el);
 
     if (t.key) {
       el.classList.add("movable");
+      el.classList.toggle("selected", t.key === selectedKey);
       el._thing = t; // 끌기/크기 조절 처리에서 어떤 항목인지 알아내는 용도
     }
 
@@ -499,10 +697,59 @@ function renderBigScene() {
     }
   });
 
+  renderSceneActions();
   sceneInfoEl.textContent =
     placedCount() === 0
       ? "식물을 키우고 상점에서 장식을 사서 정원을 꾸며 보세요!"
-      : `아이템 ${placedCount()}/${capacity()}칸 · 끌어서 옮기고, 마우스 휠이나 두 손가락으로 크기를 바꿀 수 있어요`;
+      : `${gardenLabel(garden.current)} · 아이템 ${placedCount()}/${ITEM_LIMIT}칸 · 끌어서 옮기고, 마우스 휠이나 두 손가락으로 크기를 바꿀 수 있어요`;
+}
+
+// 선택한 항목을 치우는 버튼 (실수로 누르지 않게 두 번 눌러야 치워진다)
+function renderSceneActions() {
+  sceneActionsEl.innerHTML = "";
+  if (!selectedKey) return;
+
+  const btn = document.createElement("button");
+  btn.className = "secondary";
+  btn.textContent = "🗑 선택한 아이템 치우기 (별은 돌려받지 않아요)";
+  let armed = false;
+  btn.addEventListener("click", () => {
+    if (!armed) {
+      armed = true;
+      btn.classList.add("danger");
+      btn.textContent = "정말 치울까요? 한 번 더 누르세요";
+      return;
+    }
+    removeItem(selectedKey);
+    selectedKey = null;
+    renderScene();
+  });
+  sceneActionsEl.appendChild(btn);
+}
+
+// 아이템을 치운다. 뒤에 있던 항목들의 번호가 하나씩 당겨지므로, 저장된 위치/크기의 키도 같이 당긴다
+function removeItem(key) {
+  const d = cur();
+  const type = key[0];
+  const index = Number(key.slice(1));
+  const list = type === "t" ? d.planted : d.decor;
+  if (!(index >= 0 && index < list.length)) return;
+  list.splice(index, 1);
+
+  [d.positions, d.scales].forEach((map) => {
+    const entries = Object.entries(map);
+    Object.keys(map).forEach((k) => delete map[k]);
+    entries.forEach(([k, v]) => {
+      if (k[0] !== type) {
+        map[k] = v;
+        return;
+      }
+      const j = Number(k.slice(1));
+      if (j === index) return; // 치운 항목의 위치/크기는 버린다
+      map[`${type}${j > index ? j - 1 : j}`] = v;
+    });
+  });
+  saveGarden();
 }
 
 // 같은 시드면 항상 같은 난수가 나오는 간단한 생성기 (새로 열어도 배치가 안 바뀌게)
@@ -567,7 +814,14 @@ function initSceneInteractions() {
     if (!active) {
       // 첫 손가락: 항목 위라면 끌기 시작
       const el = e.target.closest(".scene-item.movable");
-      if (!el) return;
+      if (!el) {
+        // 빈 곳을 누르면 선택 해제
+        if (selectedKey) {
+          selectedKey = null;
+          renderScene();
+        }
+        return;
+      }
       const t = el._thing;
       active = { el, thing: t, pointerId: e.pointerId, x: t.x, y: t.y, scale: t.scale, changed: false, pinched: false };
       sceneEl.setPointerCapture(e.pointerId);
@@ -606,12 +860,13 @@ function initSceneInteractions() {
     if (!active || pointers.size > 0) return;
 
     // 모든 손가락을 뗐을 때 저장하고, 앞뒤 순서를 다시 계산
+    const key = active.thing.key;
     if (active.changed) {
-      const key = active.thing.key;
-      garden.positions[key] = { x: active.x, y: active.y };
-      garden.scales[key] = active.scale;
+      cur().positions[key] = { x: active.x, y: active.y };
+      cur().scales[key] = active.scale;
       saveGarden();
     }
+    selectedKey = key; // 누르거나 옮긴 항목을 선택 (치우기 버튼이 나타난다)
     active = null;
     renderScene();
   };
@@ -631,7 +886,7 @@ function initSceneInteractions() {
       t.scale = clampScale(t.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
       applySceneThing(el, t, t.x, t.y, t.scale);
 
-      garden.scales[t.key] = t.scale;
+      cur().scales[t.key] = t.scale;
       clearTimeout(saveTimer); // 휠을 굴리는 동안은 잠깐 모아서 한 번만 저장
       saveTimer = setTimeout(saveGarden, 300);
     },
@@ -641,12 +896,13 @@ function initSceneInteractions() {
 
 
 // ===== 상점 (별로 씨앗과 장식 사기) =====
-// basic: true는 2단계 기본 장식 (싸게 늘 열려 있음), 나머지는 특별 장식
+// garden: 어느 정원에서 파는지 (생략하면 1단계). basic: true는 싸게 늘 열려 있는 기본 장식
 const SHOP_ITEMS = [
+  // 1단계 풀밭 정원
   { id: "tulip", basic: true, emoji: "🌷", name: "튤립", price: 1 },
-  { id: "sunflower", emoji: "🌻", name: "해바라기", price: 2 },
   { id: "mushroom", basic: true, emoji: "🍄", name: "버섯", price: 1 },
   { id: "rock", basic: true, emoji: "🪨", name: "바위", price: 1 },
+  { id: "sunflower", emoji: "🌻", name: "해바라기", price: 2 },
   { id: "bee", sky: true, emoji: "🐝", name: "꿀벌", price: 4 },
   { id: "butterfly", sky: true, emoji: "🦋", name: "나비", price: 4 },
   { id: "bench", emoji: "🪑", name: "벤치", price: 5 },
@@ -655,7 +911,20 @@ const SHOP_ITEMS = [
   { id: "fountain", emoji: "⛲", name: "분수", price: 8 },
   { id: "rabbit", emoji: "🐇", name: "토끼", price: 10 },
   { id: "rainbow", sky: true, emoji: "🌈", name: "무지개", price: 12 },
+  // 2단계 연못 정원
+  { id: "frog", garden: 2, basic: true, emoji: "🐸", name: "개구리", price: 1 },
+  { id: "shell", garden: 2, basic: true, emoji: "🐚", name: "조개", price: 1 },
+  { id: "waterweed", garden: 2, basic: true, emoji: "🌿", name: "수초", price: 1 },
+  { id: "duck", garden: 2, emoji: "🦆", name: "오리", price: 4 },
+  { id: "koi", garden: 2, emoji: "🐟", name: "잉어", price: 5 },
+  { id: "turtle", garden: 2, emoji: "🐢", name: "거북이", price: 6 },
+  { id: "bridge", garden: 2, emoji: "🌉", name: "다리", price: 6 },
+  { id: "swan", garden: 2, emoji: "🦢", name: "백조", price: 8 },
+  { id: "moon", garden: 2, sky: true, emoji: "🌙", name: "달", price: 8 },
+  { id: "torii", garden: 2, emoji: "⛩️", name: "도리이", price: 10 },
 ];
+const itemGarden = (item) => item.garden ?? 1;
+
 const shopStarsEl = document.getElementById("shop-stars");
 const shopListEl = document.getElementById("shop-list");
 const shopMsgEl = document.getElementById("shop-msg");
@@ -668,11 +937,12 @@ function renderShop() {
     h.textContent = text;
     shopListEl.appendChild(h);
   };
-  shopStarsEl.textContent = `보유 별 ⭐ ${totalStars} · 아이템 ${placedCount()}/${capacity()}칸`;
+  shopStarsEl.textContent =
+    `보유 별 ⭐ ${totalStars} · ${GARDENS[garden.current].name} 아이템 ${placedCount()}/${ITEM_LIMIT}칸`;
 
-  // 씨앗: 모든 단계에서 살 수 있다. 한 번 사면 그 식물을 계속 심을 수 있다
+  // 씨앗: 한 번 사면 그 식물을 계속 심을 수 있다 (지금 보고 있는 정원의 식물만 판다)
   heading("🌱 씨앗 (한 번 사면 계속 심을 수 있어요)");
-  PLANT_IDS.forEach((id) => {
+  GARDENS[garden.current].plants.forEach((id) => {
     const owned = garden.unlocked.includes(id);
     const card = document.createElement("div");
     card.className = "shop-item";
@@ -694,9 +964,9 @@ function renderShop() {
     shopListEl.appendChild(card);
   });
 
-  // 장식: 놓을 수 있는 칸이 남아 있으면 살 수 있다
+  // 장식: 칸이 남아 있으면 살 수 있다 (지금 보고 있는 정원에 놓인다)
   const addDecor = (item) => {
-    const owned = garden.decor.filter((id) => id === item.id).length;
+    const owned = cur().decor.filter((id) => id === item.id).length;
     const card = document.createElement("div");
     card.className = "shop-item";
     card.innerHTML =
@@ -706,16 +976,17 @@ function renderShop() {
 
     const btn = document.createElement("button");
     btn.textContent = `⭐ ${item.price} 구매`;
-    btn.disabled = totalStars < item.price || usedSlots() >= capacity();
+    btn.disabled = totalStars < item.price || isGardenFull();
     btn.addEventListener("click", () => buyItem(item.id));
     card.appendChild(btn);
     shopListEl.appendChild(card);
   };
 
+  const here = SHOP_ITEMS.filter((it) => itemGarden(it) === garden.current);
   heading("🪨 기본 장식");
-  SHOP_ITEMS.filter((it) => it.basic).forEach(addDecor);
+  here.filter((it) => it.basic).forEach(addDecor);
   heading("✨ 특별 장식");
-  SHOP_ITEMS.filter((it) => !it.basic).forEach(addDecor);
+  here.filter((it) => !it.basic).forEach(addDecor);
 }
 
 // 씨앗 사기: 한 번 사면 계속 심을 수 있다
@@ -736,11 +1007,10 @@ function buySeed(id) {
 
 function buyItem(id) {
   const item = SHOP_ITEMS.find((it) => it.id === id);
-  if (!item) return;
+  if (!item || itemGarden(item) !== garden.current) return;
 
-  if (usedSlots() >= capacity()) {
-    shopMsgEl.textContent =
-      garden.level === 1 ? "정원이 가득 찼어요! 키우기 탭에서 정원을 넓혀 보세요." : "정원이 가득 찼어요!";
+  if (isGardenFull()) {
+    shopMsgEl.textContent = "이 정원이 가득 찼어요! 풍경에서 아이템을 치우거나 다음 정원을 열어 보세요.";
     return;
   }
   if (totalStars < item.price) {
@@ -751,9 +1021,9 @@ function buyItem(id) {
   totalStars -= item.price;
   saveStars(totalStars);
   showStars();
-  garden.decor.push(id);
+  cur().decor.push(id);
   saveGarden();
-  shopMsgEl.textContent = `${item.emoji} ${item.name}을(를) 정원에 놓았어요!`;
+  shopMsgEl.textContent = `${item.emoji} ${item.name}을(를) ${GARDENS[garden.current].name}에 놓았어요!`;
   renderShop();
 }
 
@@ -825,13 +1095,16 @@ function renderStatus() {
   }
   html += "</div>";
 
-  const levelName = garden.level === 1 ? "🌱 1단계 · 작은 정원" : "🏡 2단계 · 넓은 정원";
+  html += '<ul class="stat-list"><li class="head">정원</li>';
+  GARDEN_IDS.forEach((id) => {
+    const open = id <= garden.unlockedGardens;
+    html += statRow(
+      open ? gardenLabel(id) : `🔒 ${id}단계 ${GARDENS[id].name}`,
+      open ? `${placedCount(id)}/${ITEM_LIMIT}칸` : "잠김"
+    );
+  });
   html += `
-    <ul class="stat-list">
-      ${statRow("정원 단계", levelName)}
-      ${statRow("🧺 놓은 아이템", `${placedCount()}/${capacity()}칸`)}
-      ${statRow("🌳 심은 식물", `${garden.planted.length}개`)}
-      ${statRow("🌷 정원 장식", `${garden.decor.length}개`)}
+      <li class="head">별</li>
       ${statRow("⭐ 보유 별", totalStars)}
       ${statRow("🏅 지금까지 번 별", stats.earned)}
       <li class="head">푼 퍼즐</li>`;
@@ -883,6 +1156,8 @@ function renderHomePlant() {
 }
 
 function showTab(name) {
+  activeTab = name;
+  renderGardenSwitch();
   tabGrowEl.hidden = name !== "grow";
   tabShopEl.hidden = name !== "shop";
   tabSceneEl.hidden = name !== "scene";
@@ -903,6 +1178,7 @@ function showTab(name) {
 function openGarden() {
   resumeOnClose = pauseTimer();
   gardenMsgEl.textContent = "";
+  selectedKey = null;
   showTab("grow");
   gardenEl.hidden = false;
 }

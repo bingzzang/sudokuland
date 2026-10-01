@@ -77,6 +77,8 @@
   <!-- 정원 화면 (열기/닫기) -->
   <div id="garden" class="overlay" hidden>
     <div class="panel">
+      <div id="garden-switch" class="garden-switch"></div>
+
       <div class="tabs">
         <button id="tab-grow-btn" class="tab active">🌱 키우기</button>
         <button id="tab-shop-btn" class="tab">🛒 상점</button>
@@ -88,6 +90,7 @@
         <div id="grow-view">
           <div id="tree" class="tree"></div>
           <div id="tree-name" class="tree-name"></div>
+          <div id="grow-target" class="status-note"></div>
           <div id="tree-dots" class="dots"></div>
           <button id="tree-action" class="primary"></button>
         </div>
@@ -104,6 +107,7 @@
 
       <section id="tab-scene" hidden>
         <div id="scene" class="scene"></div>
+        <div id="scene-actions" class="scene-actions"></div>
         <p id="scene-info" class="garden-msg"></p>
       </section>
 
