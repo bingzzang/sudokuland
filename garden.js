@@ -3,9 +3,8 @@
 // 함수 안에서 쓸 때(실행 시점)에 script.js에 있는 것을 가져다 쓴다.
 
 const GARDEN_KEY = "sudoku-garden";
-const CAPACITY = { 1: 6, 2: 12 }; // 정원 단계별로 심을 수 있는 식물 수
+const ITEM_LIMIT = { 1: 10, 2: 30 }; // 정원 단계별로 놓을 수 있는 아이템 수 (식물 + 장식)
 const EXPAND_COST = 20;           // 2단계 정원으로 확장하는 데 드는 별
-const MAX_DECOR = 30;             // 장식 상한
 
 // 식물 종류. cost = 한 단계 키우는 데 드는 별, stages = 단계 이름 (마지막이 다 자란 모습)
 const PLANTS = {
@@ -222,7 +221,11 @@ function saveGarden() {
   }
 }
 
-const capacity = () => CAPACITY[garden.level];
+const capacity = () => ITEM_LIMIT[garden.level];
+// 정원에 놓였거나, 곧 놓일(키우는 중인) 아이템 수. 키우는 식물도 한 칸을 미리 차지한다
+const usedSlots = () => garden.planted.length + garden.decor.length + (garden.growing ? 1 : 0);
+// 정원에 이미 놓인 아이템 수
+const placedCount = () => garden.planted.length + garden.decor.length;
 
 // ----- 화면 요소 -----
 const gardenEl = document.getElementById("garden");
@@ -287,7 +290,7 @@ function renderGarden(grew = false) {
 
 // 키울 식물 고르기
 function renderPicker() {
-  const full = garden.planted.length >= capacity();
+  const full = usedSlots() >= capacity();
   pickerEl.innerHTML = `<div class="picker-title">무엇을 키울까요?</div><div class="picker-grid"></div>`;
   const grid = pickerEl.querySelector(".picker-grid");
 
@@ -321,52 +324,53 @@ function renderPicker() {
     note.className = "garden-msg";
     note.textContent =
       garden.level === 1
-        ? "정원이 가득 찼어요. 아래에서 2단계 정원으로 확장해 보세요!"
+        ? "정원이 가득 찼어요. 아래에서 정원을 넓혀 보세요!"
         : "정원이 가득 찼어요!";
     pickerEl.appendChild(note);
   }
 }
 
 function startPlant(id) {
-  if (garden.growing || garden.planted.length >= capacity() || !garden.unlocked.includes(id)) return;
+  if (garden.growing || usedSlots() >= capacity() || !garden.unlocked.includes(id)) return;
   garden.growing = { plant: id, stage: 0 };
   gardenMsgEl.textContent = `${PLANTS[id].name}의 새싹을 심었어요 🌱`;
   saveGarden();
   renderGarden(true);
 }
 
-// 정원 단계 안내 + (1단계가 가득 차면) 2단계 확장 버튼
+// 정원 단계 안내 + (1단계가 가득 차면) 정원 넓히기 버튼
 function renderExpandBox() {
-  const count = garden.planted.length;
+  const count = placedCount();
   const cap = capacity();
+  const detail = `식물 ${garden.planted.length}개 · 장식 ${garden.decor.length}개`;
 
   if (garden.level === 1) {
-    const full = count >= cap;
+    const full = usedSlots() >= cap;
     expandBoxEl.innerHTML =
       `<div class="expand-title">🌱 1단계 · 작은 정원</div>` +
-      `<div class="expand-sub">식물 ${count}/${cap}칸</div>` +
-      `<div class="bar"><div style="width: ${(count / cap) * 100}%"></div></div>` +
+      `<div class="expand-sub">아이템 ${count}/${cap}칸 (${detail})</div>` +
+      `<div class="bar"><div style="width: ${(usedSlots() / cap) * 100}%"></div></div>` +
       (full
         ? ""
-        : `<div class="status-note">${cap}칸을 모두 채우면 2단계 정원으로 확장할 수 있어요 (⭐${EXPAND_COST} 필요)</div>`);
+        : `<div class="status-note">${cap}칸을 모두 채우면 정원을 ${ITEM_LIMIT[2]}칸으로 넓힐 수 있어요 (⭐${EXPAND_COST} 필요)</div>`);
 
     if (full) {
       const btn = document.createElement("button");
       btn.className = "primary";
-      btn.textContent = `🏡 2단계 정원으로 확장하기 (⭐${EXPAND_COST})`;
+      btn.textContent = `🏡 정원 넓히기 → ${ITEM_LIMIT[2]}칸 (⭐${EXPAND_COST})`;
       btn.disabled = totalStars < EXPAND_COST;
       btn.addEventListener("click", expandGarden);
       expandBoxEl.appendChild(btn);
     }
   } else {
     expandBoxEl.innerHTML =
-      `<div class="expand-title">🏡 2단계 · 꾸미기 정원</div>` +
-      `<div class="expand-sub">식물 ${count}/${cap}칸 · 장식 ${garden.decor.length}/${MAX_DECOR}개</div>`;
+      `<div class="expand-title">🏡 2단계 · 넓은 정원</div>` +
+      `<div class="expand-sub">아이템 ${count}/${cap}칸 (${detail})</div>`;
   }
 }
 
 function expandGarden() {
-  if (garden.level !== 1 || garden.planted.length < capacity()) return;
+  if (garden.level !== 1 || usedSlots() < capacity()) return;
   if (totalStars < EXPAND_COST) {
     gardenMsgEl.textContent = "별이 부족해요. 스도쿠를 풀어서 모아 보세요!";
     return;
@@ -375,7 +379,7 @@ function expandGarden() {
   saveStars(totalStars);
   showStars();
   garden.level = 2;
-  gardenMsgEl.textContent = "🎉 2단계 정원으로 확장했어요! 상점이 열렸고, 장식을 옮길 수 있어요.";
+  gardenMsgEl.textContent = `🎉 정원이 넓어졌어요! 이제 ${ITEM_LIMIT[2]}칸까지 놓을 수 있어요.`;
   saveGarden();
   renderGarden();
 }
@@ -430,57 +434,12 @@ function sceneSize(entry, y, scale = entry.scale ?? 1) {
   return size * scale;
 }
 
-// 1단계 작은 정원의 식물 자리 (x, y는 % 단위): 3칸 x 2줄
-const SLOT_POS = [[26, 64], [50, 64], [74, 64], [26, 86], [50, 86], [74, 86]];
-
 function renderScene() {
   sceneEl.innerHTML = "";
-  sceneEl.classList.toggle("small", garden.level === 1);
-  if (garden.level === 1) renderSmallScene();
-  else renderBigScene();
+  renderBigScene();
 }
 
-// 1단계: 울타리 친 작은 화단. 다 자란 식물은 알아서 빈자리에 심어진다 (옮길 수 없음)
-function renderSmallScene() {
-  const add = (cls, html, x, y, width) => {
-    const el = document.createElement("div");
-    el.className = cls;
-    if (html) el.innerHTML = html;
-    el.style.left = `${x}%`;
-    el.style.top = `${y}%`;
-    if (width) el.style.width = `${width}%`;
-    sceneEl.appendChild(el);
-    return el;
-  };
-
-  add("scene-sun", "☀️", 88, 14);
-  const bed = document.createElement("div");
-  bed.className = "bed";
-  sceneEl.appendChild(bed);
-
-  SLOT_POS.forEach(([x, y], i) => {
-    if (i < garden.planted.length) {
-      const id = garden.planted[i];
-      add("slot-plant", plantSVG(id, maxStageOf(id)), x, y, 22);
-    } else if (i === garden.planted.length && garden.growing) {
-      const g = garden.growing;
-      const el = add("slot-plant growing", plantSVG(g.plant, g.stage), x, y, 22);
-      el.title = `키우는 중 · ${PLANTS[g.plant].stages[g.stage]}`;
-    } else {
-      add("slot", "", x, y);
-    }
-  });
-
-  const count = garden.planted.length;
-  sceneInfoEl.textContent =
-    count === 0 && !garden.growing
-      ? "별로 식물을 키워서 정원을 채워 보세요!"
-      : count >= capacity()
-        ? "정원이 가득 찼어요! 키우기 탭에서 2단계로 확장할 수 있어요."
-        : `식물 ${count}/${capacity()}칸 · 다 자라면 알아서 심어져요`;
-}
-
-// 2단계: 넓은 정원. 장식을 사서 꾸미고, 끌어서 옮기고, 크기를 바꿀 수 있다
+// 식물과 장식을 자유롭게 끌어서 옮기고, 크기를 바꿀 수 있다 (놓을 수 있는 개수만 단계별로 제한)
 function renderBigScene() {
   // 지금 키우는 식물은 정원 가운데 앞쪽 (옮길 수 없음)
   const placed = [{ x: 50, y: 78 }];
@@ -541,9 +500,9 @@ function renderBigScene() {
   });
 
   sceneInfoEl.textContent =
-    garden.decor.length + garden.planted.length === 0
-      ? "상점에서 장식을 사고 식물을 심어 정원을 꾸며 보세요!"
-      : `식물 ${garden.planted.length}개 · 장식 ${garden.decor.length}개 · 끌어서 옮기고, 마우스 휠이나 두 손가락으로 크기를 바꿀 수 있어요`;
+    placedCount() === 0
+      ? "식물을 키우고 상점에서 장식을 사서 정원을 꾸며 보세요!"
+      : `아이템 ${placedCount()}/${capacity()}칸 · 끌어서 옮기고, 마우스 휠이나 두 손가락으로 크기를 바꿀 수 있어요`;
 }
 
 // 같은 시드면 항상 같은 난수가 나오는 간단한 생성기 (새로 열어도 배치가 안 바뀌게)
@@ -681,7 +640,7 @@ function initSceneInteractions() {
 }
 
 
-// ===== 상점 (2단계 정원에서 열림. 별로 장식 사기) =====
+// ===== 상점 (별로 씨앗과 장식 사기) =====
 // basic: true는 2단계 기본 장식 (싸게 늘 열려 있음), 나머지는 특별 장식
 const SHOP_ITEMS = [
   { id: "tulip", basic: true, emoji: "🌷", name: "튤립", price: 1 },
@@ -709,8 +668,7 @@ function renderShop() {
     h.textContent = text;
     shopListEl.appendChild(h);
   };
-  const decorCount = garden.level >= 2 ? ` · 장식 ${garden.decor.length}/${MAX_DECOR}` : "";
-  shopStarsEl.textContent = `보유 별 ⭐ ${totalStars}${decorCount}`;
+  shopStarsEl.textContent = `보유 별 ⭐ ${totalStars} · 아이템 ${placedCount()}/${capacity()}칸`;
 
   // 씨앗: 모든 단계에서 살 수 있다. 한 번 사면 그 식물을 계속 심을 수 있다
   heading("🌱 씨앗 (한 번 사면 계속 심을 수 있어요)");
@@ -736,20 +694,7 @@ function renderShop() {
     shopListEl.appendChild(card);
   });
 
-  // 장식: 2단계 정원에서 열린다
-  if (garden.level < 2) {
-    heading("🌷 장식");
-    shopListEl.insertAdjacentHTML(
-      "beforeend",
-      `<div class="lock-box">` +
-        `<div class="lock-icon">🔒</div>` +
-        `<div class="name">장식은 2단계 정원에서 열려요</div>` +
-        `<div class="status-note">작은 정원 ${capacity()}칸을 식물로 모두 채우고<br>⭐${EXPAND_COST}로 확장하면 살 수 있어요.<br>(지금 ${garden.planted.length}/${capacity()}칸)</div>` +
-        `</div>`
-    );
-    return;
-  }
-
+  // 장식: 놓을 수 있는 칸이 남아 있으면 살 수 있다
   const addDecor = (item) => {
     const owned = garden.decor.filter((id) => id === item.id).length;
     const card = document.createElement("div");
@@ -761,7 +706,7 @@ function renderShop() {
 
     const btn = document.createElement("button");
     btn.textContent = `⭐ ${item.price} 구매`;
-    btn.disabled = totalStars < item.price || garden.decor.length >= MAX_DECOR;
+    btn.disabled = totalStars < item.price || usedSlots() >= capacity();
     btn.addEventListener("click", () => buyItem(item.id));
     card.appendChild(btn);
     shopListEl.appendChild(card);
@@ -791,10 +736,11 @@ function buySeed(id) {
 
 function buyItem(id) {
   const item = SHOP_ITEMS.find((it) => it.id === id);
-  if (!item || garden.level < 2) return;
+  if (!item) return;
 
-  if (garden.decor.length >= MAX_DECOR) {
-    shopMsgEl.textContent = "정원이 가득 찼어요!";
+  if (usedSlots() >= capacity()) {
+    shopMsgEl.textContent =
+      garden.level === 1 ? "정원이 가득 찼어요! 키우기 탭에서 정원을 넓혀 보세요." : "정원이 가득 찼어요!";
     return;
   }
   if (totalStars < item.price) {
@@ -879,12 +825,13 @@ function renderStatus() {
   }
   html += "</div>";
 
-  const levelName = garden.level === 1 ? "🌱 1단계 · 작은 정원" : "🏡 2단계 · 꾸미기 정원";
+  const levelName = garden.level === 1 ? "🌱 1단계 · 작은 정원" : "🏡 2단계 · 넓은 정원";
   html += `
     <ul class="stat-list">
       ${statRow("정원 단계", levelName)}
-      ${statRow("🌳 심은 식물", `${garden.planted.length}/${capacity()}칸`)}
-      ${statRow("🌷 정원 장식", garden.level === 1 ? "🔒 2단계에서 열림" : `${garden.decor.length}개`)}
+      ${statRow("🧺 놓은 아이템", `${placedCount()}/${capacity()}칸`)}
+      ${statRow("🌳 심은 식물", `${garden.planted.length}개`)}
+      ${statRow("🌷 정원 장식", `${garden.decor.length}개`)}
       ${statRow("⭐ 보유 별", totalStars)}
       ${statRow("🏅 지금까지 번 별", stats.earned)}
       <li class="head">푼 퍼즐</li>`;

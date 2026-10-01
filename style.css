@@ -751,44 +751,6 @@ button:disabled {
   opacity: 0.4;
 }
 
-/* ===== 1단계 작은 정원 ===== */
-.scene.small .scene-sun {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  font-size: 28px;
-  line-height: 1;
-}
-.scene.small .bed {
-  position: absolute;
-  left: 10%;
-  top: 48%;
-  width: 80%;
-  height: 48%;
-  background: rgba(122, 82, 48, 0.55);
-  border: 3px dashed #c9a26b; /* 울타리 */
-  border-radius: 14px;
-}
-.scene.small .slot {
-  position: absolute;
-  width: 14%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border: 2px dashed rgba(255, 255, 255, 0.5);
-  border-radius: 50%;
-}
-.scene.small .slot-plant {
-  position: absolute;
-  transform: translate(-50%, -62%);
-}
-.scene.small .slot-plant svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.scene.small .slot-plant.growing {
-  opacity: 0.85;
-}
-
 /* 씨앗 상점 / 잠긴 식물 */
 .shop-heading {
   grid-column: 1 / -1;
