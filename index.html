@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>스도쿠</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 메인(홈) 화면 -->
+  <main id="home">
+    <header>
+      <h1>스도쿠</h1>
+      <div class="header-right">
+        <div class="stars-badge" title="보유 별">⭐ 0</div>
+      </div>
+    </header>
+
+    <button id="home-tree-card" class="tree-card" aria-label="정원 열기">
+      <div id="home-tree" class="tree"></div>
+      <div id="home-tree-name" class="tree-name"></div>
+      <div id="home-dots" class="dots"></div>
+      <div class="tree-card-hint">눌러서 정원 가기 🌳</div>
+    </button>
+
+    <h2 class="section-title">난이도를 선택하세요</h2>
+    <div class="levels">
+      <button class="level" data-level="easy">
+        <span class="level-name">쉬움</span>
+        <span class="level-reward">⭐ 1</span>
+      </button>
+      <button class="level" data-level="medium">
+        <span class="level-name">보통</span>
+        <span class="level-reward">⭐ 3</span>
+      </button>
+      <button class="level" data-level="hard">
+        <span class="level-name">어려움</span>
+        <span class="level-reward">⭐ 5</span>
+      </button>
+    </div>
+
+    <button id="continue-btn" class="secondary continue" hidden>▶ 이어하기</button>
+  </main>
+
+  <!-- 게임 화면 -->
+  <main id="game" hidden>
+    <header>
+      <div class="header-left">
+        <button id="home-btn" class="icon-btn" aria-label="홈으로">←</button>
+        <h1 id="game-title">스도쿠</h1>
+      </div>
+      <div class="header-right">
+        <div class="stars-badge" title="보유 별">⭐ 0</div>
+        <button id="garden-btn" class="icon-btn" aria-label="내 정원">🌳</button>
+      </div>
+    </header>
+
+    <div class="status">
+      <div id="timer">00:00</div>
+      <div id="best"></div>
+    </div>
+
+    <div id="board"></div>
+
+    <p id="message"></p>
+
+    <div class="actions">
+      <button id="notes-toggle" class="secondary">✏️ 메모 OFF (N)</button>
+      <button id="hint" class="secondary">💡 힌트 (3)</button>
+    </div>
+
+    <div id="numpad"></div>
+
+    <button id="new-game" class="primary">새 게임</button>
+  </main>
+
+  <!-- 정원 화면 (열기/닫기) -->
+  <div id="garden" class="overlay" hidden>
+    <div class="panel">
+      <div class="tabs">
+        <button id="tab-grow-btn" class="tab active">🌱 키우기</button>
+        <button id="tab-status-btn" class="tab">📊 현황</button>
+      </div>
+
+      <section id="tab-grow">
+        <div id="tree" class="tree"></div>
+        <div id="tree-name" class="tree-name"></div>
+        <div id="tree-dots" class="dots"></div>
+        <button id="tree-action" class="primary"></button>
+        <p id="garden-msg" class="garden-msg"></p>
+
+        <h3 id="planted-title">심은 나무</h3>
+        <div id="planted" class="planted"></div>
+      </section>
+
+      <section id="tab-status" hidden>
+        <div id="status-body"></div>
+      </section>
+
+      <button id="garden-close" class="secondary close">닫기</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
