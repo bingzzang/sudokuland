@@ -280,7 +280,7 @@ function defaultGarden() {
   const gardens = {};
   GARDEN_IDS.forEach((id) => (gardens[id] = emptyGardenData()));
   return {
-    current: 1, unlockedGardens: 1, growing: null, gardens,
+    current: 1, unlockedGardens: 1, growing: { plant: "apple", stage: 0, garden: 1 }, gardens,
     discovered: [], unlocked: [...STARTER_PLANTS],
   };
 }
@@ -303,6 +303,7 @@ function loadGarden() {
 // 현재 형식의 저장 데이터를 검사해서 깨진 값은 바로잡는다
 function sanitizeGarden(saved) {
   const g = defaultGarden();
+  g.growing = null; // 저장된 값이 있으면 그대로 따른다 (기본 사과 새싹은 처음 시작할 때만)
   const validPlants = (arr) => (Array.isArray(arr) ? arr.filter((id) => PLANTS[id]) : []);
 
   GARDEN_IDS.forEach((id) => {
@@ -347,6 +348,7 @@ function fromOldFormat(saved) {
   const decor = Array.isArray(saved.decor) ? saved.decor.filter((d) => typeof d === "string") : [];
 
   const g = defaultGarden();
+  g.growing = null;
   g.gardens[1] = {
     planted,
     decor,
