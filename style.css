@@ -18,6 +18,10 @@
   --danger-bg: #fdecec;
   --key-bg: #f1f3fa;
   --shadow: 0 10px 30px rgba(60, 72, 130, 0.14);
+  --sky-top: #8fd3ff;
+  --sky-bottom: #e4f6ff;
+  --grass-top: #8bd36b;
+  --grass-bottom: #5faa4a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,6 +44,10 @@
     --danger-bg: #3a2024;
     --key-bg: #262a3b;
     --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --sky-top: #14204a;
+    --sky-bottom: #3a4a86;
+    --grass-top: #2f6b3a;
+    --grass-bottom: #214d2b;
   }
 }
 
@@ -202,8 +210,8 @@ main[hidden] {
 }
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
   margin-bottom: 16px;
   padding: 4px;
   background: var(--key-bg);
@@ -211,6 +219,7 @@ main[hidden] {
 }
 .tab {
   padding: 10px 0;
+  font-size: 13px;
   color: var(--muted);
   background: transparent;
 }
@@ -221,6 +230,50 @@ main[hidden] {
 }
 section[hidden] {
   display: none;
+}
+
+/* 정원 풍경 */
+.scene {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 16px;
+  touch-action: none; /* 풍경 위에서는 손가락 조작이 화면 스크롤/확대로 번지지 않게 */
+  /* 위쪽 46%는 하늘, 아래는 잔디 */
+  background: linear-gradient(
+    to bottom,
+    var(--sky-top) 0%,
+    var(--sky-bottom) 46%,
+    var(--grass-top) 46%,
+    var(--grass-bottom) 100%
+  );
+}
+.scene-item {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  line-height: 1;
+  user-select: none;
+}
+/* 옮길 수 있는 것들 */
+.scene-item.movable {
+  touch-action: none; /* 터치로 끌 때 화면이 스크롤되지 않게 */
+  cursor: grab;
+}
+.scene-item.dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
+}
+.scene-label {
+  position: absolute;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 /* 상점 */
@@ -270,8 +323,11 @@ section[hidden] {
   border-radius: 16px;
 }
 .status-tree .big {
-  font-size: 64px;
-  line-height: 1.2;
+  line-height: 0;
+}
+.status-tree .big svg {
+  width: 96px;
+  height: 96px;
 }
 .bar {
   height: 10px;
@@ -322,8 +378,11 @@ section[hidden] {
 }
 
 .tree {
-  font-size: 96px;
-  line-height: 1.2;
+  line-height: 0;
+}
+.tree svg {
+  width: 140px;
+  height: 140px;
 }
 .tree.grow {
   animation: pop 0.6s ease;
@@ -366,6 +425,17 @@ section[hidden] {
   font-size: 32px;
   background: var(--given-bg);
   border-radius: 14px;
+}
+.planted span {
+  line-height: 1;
+}
+.planted svg {
+  display: block;
+  width: 40px;
+  height: 40px;
+}
+.scene-item svg {
+  display: block;
 }
 .planted .empty {
   font-size: 14px;

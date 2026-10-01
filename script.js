@@ -13,19 +13,66 @@ let level = "medium";  // 현재 게임 난이도
 
 // ===== 정원 (별로 나무 키우기) =====
 const TREE_STAGES = [
-  { emoji: "🌱", name: "새싹" },
-  { emoji: "🌿", name: "어린 나무" },
-  { emoji: "🌳", name: "큰 나무" },
-  { emoji: "🌸", name: "꽃 피는 나무" },
-  { emoji: "🍎", name: "열매 나무" },
+  { name: "새싹" },
+  { name: "작은 나무" },
+  { name: "큰 나무" },
+  { name: "풍성한 나무" },
+  { name: "사과나무" },
 ];
 const MAX_STAGE = TREE_STAGES.length - 1;
-const WATER_COST = 3;                                  // 한 단계 키우는 데 드는 별
-const PLANT_EMOJIS = ["🌳", "🌲", "🌴", "🌸", "🍎"];   // 정원에 심겼을 때 모습 (무작위)
+const WATER_COST = 3; // 한 단계 키우는 데 드는 별
+
+// 단계별 나무 그림 (SVG). size를 주면 가로세로 px, 없으면 CSS가 정한다
+function treeSVG(stage, size) {
+  const TRUNK = "#8d5a2b";
+  const DARK = "#2e8b3d";
+  const MID = "#3fae4f";
+  const LIGHT = "#68cf74";
+  const circle = (x, y, r, fill) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/>`;
+  const trunk = (x, y, w, h) =>
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${TRUNK}"/>`;
+
+  let body = '<ellipse cx="50" cy="91" rx="24" ry="5" fill="rgba(0,0,0,0.14)"/>';
+
+  if (stage === 0) {
+    // 새싹: 줄기 하나에 잎 두 장
+    body +=
+      '<ellipse cx="50" cy="90" rx="18" ry="5" fill="#7a5230"/>' +
+      '<path d="M50 90 C50 82 50 74 50 66" stroke="#3f9b49" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<ellipse cx="38" cy="64" rx="13" ry="7" fill="#5cc86a" transform="rotate(-30 38 64)"/>' +
+      '<ellipse cx="62" cy="62" rx="13" ry="7" fill="#4caf50" transform="rotate(30 62 62)"/>';
+  } else if (stage === 1) {
+    // 작은 나무: 가는 줄기에 작은 잎 뭉치
+    body += trunk(46, 60, 8, 30) + circle(50, 50, 18, MID) + circle(44, 45, 9, LIGHT);
+  } else if (stage === 2) {
+    // 큰 나무: 굵은 줄기에 넉넉한 잎
+    body +=
+      trunk(43, 48, 14, 42) +
+      circle(32, 50, 16, DARK) + circle(68, 50, 16, DARK) +
+      circle(50, 36, 24, MID) + circle(42, 30, 10, LIGHT);
+  } else {
+    // 풍성한 나무(3) / 사과나무(4): 잎이 가득하고, 4단계에는 사과가 열린다
+    body +=
+      trunk(41, 52, 18, 38) +
+      circle(26, 46, 18, DARK) + circle(74, 46, 18, DARK) + circle(50, 52, 20, DARK) +
+      circle(50, 28, 24, MID) + circle(30, 36, 20, MID) + circle(70, 36, 20, MID) + circle(50, 44, 22, MID) +
+      circle(40, 24, 9, LIGHT) + circle(62, 32, 8, LIGHT) + circle(30, 40, 7, LIGHT);
+
+    if (stage === MAX_STAGE) {
+      [[34, 38], [52, 22], [68, 40], [42, 54], [60, 52], [24, 52], [76, 54]].forEach(([x, y]) => {
+        body += circle(x, y, 5, "#e53935") + circle(x - 1.6, y - 1.6, 1.6, "#ff8a80");
+      });
+    }
+  }
+
+  const dim = size ? ` width="${size}" height="${size}"` : "";
+  return `<svg viewBox="0 0 100 100"${dim} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
+}
 const GARDEN_KEY = "sudoku-garden";
 
-// stage: 지금 키우는 나무 단계, planted: 심은 나무들, decor: 상점에서 산 장식 id들
-let garden = { stage: 0, planted: [], decor: [] };
+// stage: 지금 키우는 나무 단계, planted: 심은 나무들, decor: 상점에서 산 장식 id들,
+// positions: 직접 옮긴 위치 (예: { d0: {x, y}, t1: {x, y} }), scales: 직접 바꾼 크기 배율 (예: { d0: 1.4 })
+let garden = { stage: 0, planted: [], decor: [], positions: {}, scales: {} };
 let resumeOnClose = false;              // 정원을 닫을 때 타이머를 이어갈지
 
 const gardenEl = document.getElementById("garden");
@@ -38,6 +85,10 @@ const plantedEl = document.getElementById("planted");
 const plantedTitleEl = document.getElementById("planted-title");
 const tabGrowEl = document.getElementById("tab-grow");
 const tabStatusEl = document.getElementById("tab-status");
+const sceneEl = document.getElementById("scene");
+const sceneInfoEl = document.getElementById("scene-info");
+const tabSceneEl = document.getElementById("tab-scene");
+const tabSceneBtn = document.getElementById("tab-scene-btn");
 const tabShopEl = document.getElementById("tab-shop");
 const tabShopBtn = document.getElementById("tab-shop-btn");
 const tabGrowBtn = document.getElementById("tab-grow-btn");
@@ -49,12 +100,17 @@ function loadGarden() {
     const saved = JSON.parse(localStorage.getItem(GARDEN_KEY));
     if (saved && Number.isInteger(saved.stage) && Array.isArray(saved.planted)) {
       // 상점 기능 이전에 저장된 데이터에는 decor가 없으므로 빈 배열로 채운다
-      return { ...saved, decor: Array.isArray(saved.decor) ? saved.decor : [] };
+      return {
+        ...saved,
+        decor: Array.isArray(saved.decor) ? saved.decor : [],
+        positions: saved.positions && typeof saved.positions === "object" ? saved.positions : {},
+        scales: saved.scales && typeof saved.scales === "object" ? saved.scales : {},
+      };
     }
   } catch {
     // 저장소를 못 쓰거나 값이 깨졌으면 새로 시작
   }
-  return { stage: 0, planted: [], decor: [] };
+  return { stage: 0, planted: [], decor: [], positions: {}, scales: {} };
 }
 
 function saveGarden() {
@@ -67,7 +123,7 @@ function saveGarden() {
 
 function renderGarden(grew = false) {
   const stage = TREE_STAGES[garden.stage];
-  treeEl.textContent = stage.emoji;
+  treeEl.innerHTML = treeSVG(garden.stage);
   treeNameEl.textContent = stage.name;
 
   if (grew) {
@@ -96,16 +152,232 @@ function renderGarden(grew = false) {
     `내 정원 · 나무 ${garden.planted.length}그루 · 장식 ${garden.decor.length}개`;
   plantedEl.innerHTML = "";
   const decorEmojis = garden.decor.map((id) => SHOP_ITEMS.find((it) => it.id === id)?.emoji);
-  const all = [...garden.planted, ...decorEmojis.filter(Boolean)];
+  // 심은 나무는 모두 다 자란 사과나무 그림으로, 장식은 이모지로 보여준다
+  const all = [
+    ...garden.planted.map(() => treeSVG(MAX_STAGE)),
+    ...decorEmojis.filter(Boolean),
+  ];
   if (all.length === 0) {
     plantedEl.innerHTML = '<span class="empty">아직 정원이 비어 있어요</span>';
   } else {
-    all.forEach((emoji) => {
+    all.forEach((html) => {
       const span = document.createElement("span");
-      span.textContent = emoji;
+      span.innerHTML = html;
       plantedEl.appendChild(span);
     });
   }
+}
+
+// ===== 정원 풍경 =====
+// 같은 시드면 항상 같은 난수가 나오는 간단한 생성기 (새로 열어도 배치가 안 바뀌게)
+function seededRandom(seed) {
+  let a = seed * 2654435761 + 1;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// 이미 놓인 것들과 너무 가깝지 않은 자리를 고른다 (x, y는 % 단위)
+function pickSpot(index, sky, placed) {
+  const rand = seededRandom(index + 1);
+  let best = null;
+  let bestDist = -1;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const x = 8 + rand() * 84;
+    const y = sky ? 10 + rand() * 26 : 54 + rand() * 38; // 하늘 / 잔디 영역
+    const nearest = placed.reduce(
+      (min, p) => Math.min(min, Math.hypot(x - p.x, (y - p.y) * 1.4)),
+      Infinity
+    );
+    if (nearest > bestDist) {
+      bestDist = nearest;
+      best = { x, y };
+    }
+    if (nearest > 14) break; // 충분히 떨어져 있으면 바로 사용
+  }
+  return best;
+}
+
+// 크기 배율 범위 (마우스 휠 / 두 손가락으로 조절)
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 2;
+const clampScale = (v) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, v));
+
+// 크기: 아래쪽(가까운 쪽)일수록 크게 + 직접 정한 배율. 하늘 장식은 기본 크기가 고정
+function sceneSize(entry, y, scale = entry.scale ?? 1) {
+  let size;
+  if (entry.sky) size = entry.big ? 52 : 24;
+  else {
+    size = Math.max(16, 22 + (y - 50) * 0.5);
+    if (entry.tree) size *= 1.6;
+  }
+  return size * scale;
+}
+
+function renderScene() {
+  sceneEl.innerHTML = "";
+
+  // 지금 키우는 나무는 정원 가운데 앞쪽에 크게 (옮길 수 없음)
+  const placed = [{ x: 50, y: 78 }];
+  const things = [{ svgStage: garden.stage, x: 50, y: 78, size: 60, label: true }];
+
+  // 심은 나무와 산 장식. key는 옮긴 위치를 저장할 때 쓰는 이름
+  const entries = [
+    ...garden.planted.map((emoji, i) => ({ emoji, tree: true, key: `t${i}` })),
+    ...garden.decor.map((id, i) => {
+      const item = SHOP_ITEMS.find((it) => it.id === id);
+      return item
+        ? { emoji: item.emoji, sky: !!item.sky, big: id === "rainbow", key: `d${i}` }
+        : null;
+    }),
+  ].filter(Boolean);
+
+  entries.forEach((entry, i) => {
+    // 자동 배치는 옮긴 위치와 상관없이 계산해서, 하나를 옮겨도 다른 것들이 움직이지 않는다
+    const auto = pickSpot(i, entry.sky, placed);
+    placed.push(auto);
+    const spot = garden.positions[entry.key] || auto;
+    const scale = garden.scales[entry.key] ?? 1;
+    things.push({ ...entry, scale, x: spot.x, y: spot.y, size: sceneSize(entry, spot.y, scale) });
+  });
+
+  things.forEach((t) => {
+    const el = document.createElement("div");
+    el.className = "scene-item";
+    const svgStage = t.svgStage ?? (t.tree ? MAX_STAGE : null);
+    if (svgStage !== null) el.innerHTML = treeSVG(svgStage, t.size * 1.3);
+    else el.textContent = t.emoji;
+    el.style.left = `${t.x}%`;
+    el.style.top = `${t.y}%`;
+    el.style.fontSize = `${t.size}px`;
+    el.style.zIndex = Math.round(t.y * 10); // 아래쪽 것이 앞에 오게
+    sceneEl.appendChild(el);
+
+    if (t.key) {
+      el.classList.add("movable");
+      el._thing = t; // 끌기/크기 조절 처리에서 어떤 항목인지 알아내는 용도
+    }
+
+    if (t.label) {
+      const label = document.createElement("div");
+      label.className = "scene-label";
+      label.textContent = `키우는 중 · ${TREE_STAGES[garden.stage].name}`;
+      label.style.left = `${t.x}%`;
+      label.style.top = `${t.y + 8}%`;
+      label.style.zIndex = 2000;
+      sceneEl.appendChild(label);
+    }
+  });
+
+  sceneInfoEl.textContent =
+    garden.decor.length + garden.planted.length === 0
+      ? "상점에서 장식을 사고 나무를 심어 정원을 꾸며 보세요!"
+      : `나무 ${garden.planted.length}그루 · 장식 ${garden.decor.length}개 · 끌어서 옮기고, 마우스 휠이나 두 손가락으로 크기를 바꿀 수 있어요`;
+}
+
+// 항목의 위치/크기를 화면에 바로 반영 (저장은 따로)
+function applySceneThing(el, thing, x, y, scale) {
+  el.style.left = `${x}%`;
+  el.style.top = `${y}%`;
+  const size = sceneSize(thing, y, scale);
+  el.style.fontSize = `${size}px`;
+  const svg = el.querySelector("svg"); // 나무 그림은 크기도 같이 바꾼다
+  if (svg) {
+    svg.setAttribute("width", size * 1.3);
+    svg.setAttribute("height", size * 1.3);
+  }
+}
+
+// 정원 풍경 조작: 끌어서 옮기기, 마우스 휠 / 두 손가락 벌리기로 크기 조절
+function initSceneInteractions() {
+  const pointers = new Map(); // 화면에 닿아 있는 손가락/마우스 (id -> 좌표)
+  let active = null;          // 지금 조작 중인 항목 {el, thing, pointerId, x, y, scale, changed, pinched}
+  let pinch = null;           // 두 손가락 조절 중이면 {startDist, startScale}
+
+  const pinchDistance = () => {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+
+  sceneEl.addEventListener("pointerdown", (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (!active) {
+      // 첫 손가락: 항목 위라면 끌기 시작
+      const el = e.target.closest(".scene-item.movable");
+      if (!el) return;
+      const t = el._thing;
+      active = { el, thing: t, pointerId: e.pointerId, x: t.x, y: t.y, scale: t.scale, changed: false, pinched: false };
+      sceneEl.setPointerCapture(e.pointerId);
+      el.classList.add("dragging");
+      el.style.zIndex = 3000; // 조작하는 동안은 맨 앞
+      e.preventDefault();
+    } else if (pointers.size === 2 && !pinch) {
+      // 두 번째 손가락: 위치는 어디든 상관없이 선택된 항목의 크기를 조절
+      pinch = { startDist: pinchDistance() || 1, startScale: active.scale };
+      active.pinched = true;
+    }
+  });
+
+  sceneEl.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!active) return;
+
+    if (pinch && pointers.size >= 2) {
+      active.scale = clampScale((pinch.startScale * pinchDistance()) / pinch.startDist);
+      active.changed = true;
+      applySceneThing(active.el, active.thing, active.x, active.y, active.scale);
+    } else if (!active.pinched && e.pointerId === active.pointerId) {
+      const rect = sceneEl.getBoundingClientRect();
+      const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+      active.x = clamp(((e.clientX - rect.left) / rect.width) * 100, 4, 96);
+      active.y = clamp(((e.clientY - rect.top) / rect.height) * 100, 6, 94);
+      active.changed = true;
+      applySceneThing(active.el, active.thing, active.x, active.y, active.scale);
+    }
+  });
+
+  const release = (e) => {
+    pointers.delete(e.pointerId);
+    if (pinch && pointers.size < 2) pinch = null;
+    if (!active || pointers.size > 0) return;
+
+    // 모든 손가락을 뗐을 때 저장하고, 앞뒤 순서를 다시 계산
+    if (active.changed) {
+      const key = active.thing.key;
+      garden.positions[key] = { x: active.x, y: active.y };
+      garden.scales[key] = active.scale;
+      saveGarden();
+    }
+    active = null;
+    renderScene();
+  };
+  sceneEl.addEventListener("pointerup", release);
+  sceneEl.addEventListener("pointercancel", release);
+
+  // 마우스 휠: 항목 위에서 굴리면 크기 조절 (페이지는 스크롤되지 않게 막는다)
+  let saveTimer = null;
+  sceneEl.addEventListener(
+    "wheel",
+    (e) => {
+      const el = e.target.closest(".scene-item.movable");
+      if (!el || active) return;
+      e.preventDefault();
+
+      const t = el._thing;
+      t.scale = clampScale(t.scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+      applySceneThing(el, t, t.x, t.y, t.scale);
+
+      garden.scales[t.key] = t.scale;
+      clearTimeout(saveTimer); // 휠을 굴리는 동안은 잠깐 모아서 한 번만 저장
+      saveTimer = setTimeout(saveGarden, 300);
+    },
+    { passive: false }
+  );
 }
 
 // ===== 상점 (별로 정원 장식 사기) =====
@@ -114,14 +386,14 @@ const SHOP_ITEMS = [
   { id: "sunflower", emoji: "🌻", name: "해바라기", price: 2 },
   { id: "mushroom", emoji: "🍄", name: "버섯", price: 3 },
   { id: "rock", emoji: "🪨", name: "바위", price: 3 },
-  { id: "bee", emoji: "🐝", name: "꿀벌", price: 4 },
-  { id: "butterfly", emoji: "🦋", name: "나비", price: 4 },
+  { id: "bee", sky: true, emoji: "🐝", name: "꿀벌", price: 4 },
+  { id: "butterfly", sky: true, emoji: "🦋", name: "나비", price: 4 },
   { id: "bench", emoji: "🪑", name: "벤치", price: 5 },
   { id: "lantern", emoji: "🏮", name: "등불", price: 5 },
   { id: "birdhouse", emoji: "🏠", name: "새집", price: 6 },
   { id: "fountain", emoji: "⛲", name: "분수", price: 8 },
   { id: "rabbit", emoji: "🐇", name: "토끼", price: 10 },
-  { id: "rainbow", emoji: "🌈", name: "무지개", price: 12 },
+  { id: "rainbow", sky: true, emoji: "🌈", name: "무지개", price: 12 },
 ];
 const MAX_DECOR = 30; // 정원이 너무 길어지지 않게 하는 상한
 
@@ -178,8 +450,7 @@ function buyItem(id) {
 function treeAction() {
   if (garden.stage === MAX_STAGE) {
     // 다 자란 나무를 정원에 심고 새 새싹을 시작
-    const emoji = PLANT_EMOJIS[Math.floor(Math.random() * PLANT_EMOJIS.length)];
-    garden.planted.push(emoji);
+    garden.planted.push("apple"); // 값은 의미 없고 개수만 센다 (그림은 모두 사과나무)
     garden.stage = 0;
     gardenMsgEl.textContent = "정원에 나무를 심었어요! 새 새싹이 돋아났어요 🌱";
     saveGarden();
@@ -244,7 +515,7 @@ function renderStatus() {
 
   let html = `
     <div class="status-tree">
-      <div class="big">${stage.emoji}</div>
+      <div class="big">${treeSVG(garden.stage)}</div>
       <div class="tree-name">${stage.name} · ${garden.stage + 1}/${TREE_STAGES.length}단계</div>
       <div class="bar"><div style="width: ${percent}%"></div></div>
       <div class="status-note">${note}</div>
@@ -272,12 +543,15 @@ function renderStatus() {
 function showTab(name) {
   tabGrowEl.hidden = name !== "grow";
   tabShopEl.hidden = name !== "shop";
+  tabSceneEl.hidden = name !== "scene";
   tabStatusEl.hidden = name !== "status";
   tabGrowBtn.classList.toggle("active", name === "grow");
   tabShopBtn.classList.toggle("active", name === "shop");
+  tabSceneBtn.classList.toggle("active", name === "scene");
   tabStatusBtn.classList.toggle("active", name === "status");
 
   if (name === "grow") renderGarden();
+  else if (name === "scene") renderScene();
   else if (name === "shop") {
     shopMsgEl.textContent = "";
     renderShop();
@@ -613,7 +887,7 @@ let homePaused = false; // 홈으로 나가면서 타이머를 멈췄는지
 // 홈 화면의 나무 표시
 function renderHome() {
   const stage = TREE_STAGES[garden.stage];
-  document.getElementById("home-tree").textContent = stage.emoji;
+  document.getElementById("home-tree").innerHTML = treeSVG(garden.stage);
   document.getElementById("home-tree-name").textContent =
     `${stage.name} · ${garden.stage + 1}/${TREE_STAGES.length}단계`;
 
@@ -924,11 +1198,13 @@ continueBtn.addEventListener("click", continueGame);
 document.getElementById("home-tree-card").addEventListener("click", openGarden);
 document.getElementById("home-btn").addEventListener("click", goHome);
 
+initSceneInteractions();
 document.getElementById("garden-btn").addEventListener("click", openGarden);
 document.getElementById("garden-close").addEventListener("click", closeGarden);
 treeActionBtn.addEventListener("click", treeAction);
 tabGrowBtn.addEventListener("click", () => showTab("grow"));
 tabShopBtn.addEventListener("click", () => showTab("shop"));
+tabSceneBtn.addEventListener("click", () => showTab("scene"));
 tabStatusBtn.addEventListener("click", () => showTab("status"));
 // 어두운 배경을 누르면 닫기
 gardenEl.addEventListener("click", (e) => {
@@ -936,6 +1212,23 @@ gardenEl.addEventListener("click", (e) => {
 });
 
 totalStars = loadStars();
+
+// 테스트용: 내 컴퓨터(파일/localhost)에서 주소 뒤에 ?givestars=100 을 붙여 열면 별을 더해준다.
+// 공개된 주소(github.io 등)에서는 동작하지 않는다.
+{
+  const extra = Number(new URLSearchParams(location.search).get("givestars"));
+  const isLocal = ["", "localhost", "127.0.0.1"].includes(location.hostname);
+  if (isLocal && extra > 0) {
+    totalStars += Math.floor(extra);
+    saveStars(totalStars);
+    try {
+      history.replaceState(null, "", location.pathname); // 새로고침해도 또 더해지지 않게 주소에서 제거
+    } catch {
+      // 주소를 못 바꿔도 별은 이미 더해졌으니 무시
+    }
+  }
+}
+
 garden = loadGarden();
 stats = loadStats();
 showStars();
