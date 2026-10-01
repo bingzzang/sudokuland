@@ -189,7 +189,10 @@ main[hidden] {
 /* ===== 정원 ===== */
 .overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -257,6 +260,8 @@ section[hidden] {
   position: absolute;
   transform: translate(-50%, -50%);
   line-height: 1;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   user-select: none;
 }
 /* 옮길 수 있는 것들 */
@@ -507,6 +512,8 @@ select {
   font-size: clamp(18px, 6vw, 28px);
   border: 1px solid var(--line-thin);
   cursor: pointer;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   user-select: none;
   transition: background 0.12s;
 }
