@@ -515,3 +515,11 @@ button:disabled {
   color: var(--accent);
   background: var(--accent-soft);
 }
+
+/* 9칸이 모두 채워진 숫자 */
+#numpad button.done {
+  color: var(--muted);
+  background: var(--key-bg);
+  text-decoration: line-through;
+  opacity: 0.45;
+}

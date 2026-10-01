@@ -250,6 +250,7 @@ const starsEls = document.querySelectorAll(".stars-badge"); // 홈/게임 화면
 
 // ===== 별 (난이도별 보상, localStorage에 누적 저장) =====
 const STAR_REWARD = { easy: 1, medium: 3, hard: 5 };
+const NO_HINT_BONUS = 1; // 힌트를 한 번도 안 쓰고 완성하면 추가로 받는 별
 const STARS_KEY = "sudoku-stars";
 let totalStars = 0;
 let gameOver = false; // 완성한 게임이면 true (별 중복 지급과 입력 방지)
@@ -652,6 +653,21 @@ function render() {
     });
     boardEl.appendChild(cell);
   }
+
+  updateNumpad();
+}
+
+// 9칸이 모두 정답으로 채워진 숫자는 패드에서 흐리게 표시한다
+function updateNumpad() {
+  for (let n = 1; n <= 9; n++) {
+    let correct = 0;
+    for (let i = 0; i < 81; i++) {
+      if (board[i] === n && solution[i] === n) correct++;
+    }
+    const btn = numpadEl.children[n - 1];
+    btn.classList.toggle("done", correct === 9);
+    btn.disabled = correct === 9;
+  }
 }
 
 // ===== 입력 처리 =====
@@ -738,7 +754,9 @@ function checkWin() {
     stopTimer();
     clearSave(); // 끝난 게임은 이어할 필요 없음
 
-    const reward = STAR_REWARD[level];
+    const used = MAX_HINTS - hintsLeft;
+    const bonus = used === 0 ? NO_HINT_BONUS : 0; // 힌트를 안 썼으면 보너스 별
+    const reward = STAR_REWARD[level] + bonus;
     totalStars += reward;
     saveStars(totalStars);
     stats.wins[level] = (stats.wins[level] || 0) + 1;
@@ -746,10 +764,10 @@ function checkWin() {
     saveStats();
     showStars(true);
 
-    const used = MAX_HINTS - hintsLeft;
     timerEl.textContent = formatTime(Date.now() - startTime);
     const elapsed = Date.now() - startTime;
-    let text = `🎉 완성! ⭐ ${reward}개 획득 · 기록 ${timerEl.textContent} · 힌트 ${used}회 사용`;
+    const rewardText = bonus ? `${reward}개 (힌트 없이 +${bonus})` : `${reward}개`;
+    let text = `🎉 완성! ⭐ ${rewardText} 획득 · 기록 ${timerEl.textContent} · 힌트 ${used}회 사용`;
 
     // 최고 기록은 힌트를 쓰지 않았을 때만 인정
     if (used === 0) {
