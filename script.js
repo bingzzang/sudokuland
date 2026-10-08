@@ -227,6 +227,42 @@ function makePuzzle(full, targetRemove) {
   return puzzle;
 }
 
+// ===== 오늘의 미션 (하루 한 판, 깨면 보너스 별) =====
+const DAILY_BONUS = 3;
+const DAILY_KEY = "sudoku-daily"; // 마지막으로 미션을 깬 날짜
+let dailyDate = null; // 지금 게임이 미션이면 그 날짜 (예: "2026-10-08"), 아니면 null
+
+function todayStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// 난이도는 랜덤이지만, 같은 날에는 몇 번을 열어도 같게 나오도록 날짜로 정한다
+function dailyLevel(date) {
+  let h = 0;
+  for (const c of date) h = (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; // 날짜가 하루씩 바뀌어도 고르게 섞이도록
+  h ^= h >>> 16;
+  return ["easy", "medium", "hard"][h % 3];
+}
+
+function loadDailyDone() {
+  try {
+    return localStorage.getItem(DAILY_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveDailyDone(date) {
+  try {
+    localStorage.setItem(DAILY_KEY, date);
+  } catch {
+    // 저장 실패는 무시
+  }
+}
+
 // ===== 진행 상황 자동 저장 =====
 const SAVE_KEY = "sudoku-save";
 
@@ -239,6 +275,7 @@ function saveGame() {
   if (board.length === 0 || gameOver) return;
   const data = {
     level,
+    daily: dailyDate,
     solution,
     board,
     given,
@@ -287,6 +324,7 @@ function loadGame() {
   }
 
   level = data.level;
+  dailyDate = typeof data.daily === "string" ? data.daily : null;
   solution = data.solution;
   board = data.board;
   given = data.given;
@@ -323,9 +361,23 @@ const continueBtn = document.getElementById("continue-btn");
 const gameTitleEl = document.getElementById("game-title");
 let homePaused = false; // 홈으로 나가면서 타이머를 멈췄는지
 
+const dailyBtn = document.getElementById("daily-btn");
+const dailyInfoEl = document.getElementById("daily-info");
+
+function renderDaily() {
+  const today = todayStr();
+  const done = loadDailyDone() === today;
+  dailyBtn.disabled = done;
+  dailyBtn.classList.toggle("done", done);
+  if (done) dailyInfoEl.textContent = "✅ 완료! 내일 또 만나요";
+  else if (dailyDate === today && board.length > 0 && !gameOver) dailyInfoEl.textContent = `${LEVEL_NAMES[level]} · 이어하기 ▶`;
+  else dailyInfoEl.textContent = `${LEVEL_NAMES[dailyLevel(today)]} · ⭐ +${DAILY_BONUS}`;
+}
+
 // 홈 화면의 식물 표시 (정원 코드는 garden.js)
 function renderHome() {
   renderHomePlant();
+  renderDaily();
 
   // 풀던 게임이 있을 때만 이어하기 표시
   continueBtn.hidden = !(board.length > 0 && !gameOver);
@@ -340,11 +392,16 @@ function showHome() {
 function showGame() {
   homeEl.hidden = true;
   gameEl.hidden = false;
-  gameTitleEl.textContent = `스도쿠 · ${LEVEL_NAMES[level]}`;
+  updateTitle();
 }
 
-function startGame(chosenLevel) {
+function updateTitle() {
+  gameTitleEl.textContent = dailyDate ? `오늘의 미션 · ${LEVEL_NAMES[level]}` : `스도쿠 · ${LEVEL_NAMES[level]}`;
+}
+
+function startGame(chosenLevel, daily = false) {
   level = chosenLevel;
+  dailyDate = daily ? todayStr() : null;
   homePaused = false;
   showGame();
   newGame();
@@ -356,6 +413,13 @@ function goHome() {
   showHome();
 }
 
+// 오늘 미션을 풀던 중이면 이어서, 아니면 오늘 난이도로 새로 시작
+function startDaily() {
+  const today = todayStr();
+  if (dailyDate === today && board.length > 0 && !gameOver) continueGame();
+  else startGame(dailyLevel(today), true);
+}
+
 function continueGame() {
   showGame();
   if (homePaused) resumeTimer();
@@ -364,6 +428,9 @@ function continueGame() {
 
 // ===== 게임 시작 =====
 function newGame() {
+  // 이미 깼거나 날짜가 지난 미션에서 '새 게임'을 누르면 일반 게임이 된다
+  if (dailyDate && (dailyDate !== todayStr() || loadDailyDone() === dailyDate)) dailyDate = null;
+  updateTitle();
   solution = Array(81).fill(0);
   fillGrid(solution);
 
@@ -541,9 +608,16 @@ function checkWin() {
 
     const used = MAX_HINTS - hintsLeft;
     const bonus = used === 0 ? NO_HINT_BONUS : 0; // 힌트를 안 썼으면 보너스 별
-    const reward = STAR_REWARD[level] + bonus;
+    // 오늘의 미션은 그날 안에, 하루 한 번만 보너스
+    const mission = dailyDate === todayStr() && loadDailyDone() !== dailyDate;
+    const missionBonus = mission ? DAILY_BONUS : 0;
+    const reward = STAR_REWARD[level] + bonus + missionBonus;
     totalStars += reward;
     saveStars(totalStars);
+    if (mission) {
+      saveDailyDone(dailyDate);
+      stats.missions = (stats.missions || 0) + 1;
+    }
     stats.wins[level] = (stats.wins[level] || 0) + 1;
     stats.earned += reward;
     saveStats();
@@ -551,8 +625,11 @@ function checkWin() {
 
     timerEl.textContent = formatTime(Date.now() - startTime);
     const elapsed = Date.now() - startTime;
-    const rewardText = bonus ? `${reward}개 (힌트 없이 +${bonus})` : `${reward}개`;
-    let text = `🎉 완성! ⭐ ${rewardText} 획득 · 기록 ${timerEl.textContent} · 힌트 ${used}회 사용`;
+    const extras = [];
+    if (bonus) extras.push(`힌트 없이 +${bonus}`);
+    if (missionBonus) extras.push(`미션 +${missionBonus}`);
+    const rewardText = extras.length ? `${reward}개 (${extras.join(", ")})` : `${reward}개`;
+    let text = `🎉 ${mission ? "오늘의 미션 " : ""}완성! ⭐ ${rewardText} 획득 · 기록 ${timerEl.textContent} · 힌트 ${used}회 사용`;
 
     // 최고 기록은 힌트를 쓰지 않았을 때만 인정
     if (used === 0) {
@@ -623,6 +700,7 @@ document.querySelectorAll(".level").forEach((btn) => {
   btn.addEventListener("click", () => startGame(btn.dataset.level));
 });
 continueBtn.addEventListener("click", continueGame);
+dailyBtn.addEventListener("click", startDaily);
 document.getElementById("home-tree-card").addEventListener("click", openGarden);
 document.getElementById("home-btn").addEventListener("click", goHome);
 

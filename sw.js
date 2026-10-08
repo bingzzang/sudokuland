@@ -1,5 +1,5 @@
 // 오프라인에서도 열리도록 앱 파일을 캐시한다. 파일을 고치면 CACHE 버전을 올릴 것
-const CACHE = "sudoku-v1";
+const CACHE = "sudoku-v2";
 const FILES = [
   "./", "./index.html", "./style.css", "./garden.js", "./script.js",
   "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png",

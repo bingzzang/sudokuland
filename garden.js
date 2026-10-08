@@ -1114,6 +1114,7 @@ function renderStatus() {
   for (const key of Object.keys(LEVEL_NAMES)) {
     html += statRow(LEVEL_NAMES[key], `${stats.wins[key] || 0}판`);
   }
+  html += statRow("📅 오늘의 미션", `${stats.missions || 0}번`);
 
   html += '<li class="head">최고 기록 (힌트 없이)</li>';
   for (const key of Object.keys(LEVEL_NAMES)) {

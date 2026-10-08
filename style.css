@@ -156,6 +156,31 @@ main[hidden] {
   color: var(--accent);
 }
 
+.daily {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #9b6cf0);
+  border-radius: 16px;
+}
+.daily-info {
+  font-size: 15px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+.daily.done {
+  color: var(--muted);
+  background: var(--key-bg);
+  opacity: 1;
+  cursor: default;
+}
+
 .continue {
   width: 100%;
   margin-top: 14px;
